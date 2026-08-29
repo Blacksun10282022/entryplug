@@ -1,0 +1,24 @@
+# DECISIONS · 规格里我自己拍板的地方（一行一条，附理由）
+
+- D01 MCP 服务手写 stdio JSON-RPC（initialize / tools/list / tools/call / ping），不依赖 `mcp` 包：协议只有四个方法，少一个会漂移的依赖；初期接触用同一段客户端代码调它。
+- D02 提议的 `base` = 目标文件的 git blob 短哈希（前 8 位，`git hash-object` 同值，Python 本地算，不起子进程）；新建文件写 `base: new`。
+- D03 提议正文「改成什么」必须含一个 fenced 代码块 = 整文件新内容（add / replace），或第一行写 `retire`（退役 = 移到同目录 retired/）；纯散文提议机器无法落地，`plug apply` 拒绝并说明。
+- D04 批过的提议移到 `proposals/applied/`（规格只写了 pending / rejected / tools；批了不能留在 pending，删了又断账）。
+- D05 一张 FTS5 表是唯一的检索表；另有两张不检索的记账表 `files`（文件哈希，增量用）和 `meta`（别名表 JSON、建索引时间、版本）。
+- D06 清洗稿格式（规格无样例）：前 6 行 `Key: value` 头 + 一行 `====` + 以 `[m:ss]` 或 `[¶n]` 开头的段落；同一 doc id 同时有 raw 与 clean 时只索引 clean，锚句 grep 两边都查。
+- D07 doc id 推导顺序：frontmatter `id` → 头部 `BVID:` / `ID:` → 文件名 stem；series = 标题里第一个分隔符（｜ | · — - ： :）之前的原样前缀。
+- D08 精简起见把 check 拆成 check.py（清单 + 报告）· numbers.py（同步率）· contact.py（初期接触），另加 eval.py：每文件 ≤250 行比「恰好 8 个文件」更重要。
+- D09 「同意率」的一致判定：chosen 规范化后等于 verdict，或以「同意 / 同 / 按它」开头；其余算分歧。分歧后谁对读 outcome 里的「它对 / 我对 / 说不清」三词。
+- D10 「盲判有效」用 git 历史核：文件首次入库的版本 verdict 非空且 chosen 为空；尚未入库的记录不计入分母。
+- D11 资料保质期：资料 frontmatter `date` 必填、`kind` 可选；天数取工具在 plug.yaml 里的 `ttl_days: {kind: N, default: N}`（默认 90）。
+- D12 「新条目入链 <3」里的「新」= git 首次提交距今 ≤30 天（未入库也算新）。
+- D13 `[?]` 对账：工具在 plug.yaml 里可写 `unreviewed: N`；实际 `[?]` 行数不等即 WARNING；没写就不查。
+- D14 受保护路径默认 = self/RULES.md · self/facts/** · tools/**（除 **/corpus/**）；materials/ 也在其中（规格「只追加」且写者是主人）；可在 plug.yaml `protected:` 覆盖。
+- D15 钩子「最近没触发」阈值 30 天（含缺失）。
+- D16 warning / diagnostic 打法「给了指向对方的动作」用启发式：动作 / 练习小节里以「让对方 / 叫对方 / 要求对方 / 告诉对方 / 向对方」开头的行。
+- D17 压缩钉子两段式：PreCompact 时算钉子写 `.kb/pin.md` 并打印；SessionStart(compact) 用同一脚本 `--emit` 以 additionalContext 注回——PreCompact 的 stdout 不保证进上下文。
+- D18 说明书镜像 = 复制 SKILL.md 到 plug.yaml 里各驾驶员的 skills 目录（默认 .claude/skills · .agents/skills），不用目录链接；链接做法留在 pilots/codex 说明里。
+- D19 index 生成的 index.md / INDEX.md 不由 pre-commit 自动 git add；生成物何时提交由主人定。
+- D20 通用挂点：`checks/*.py` 以子进程跑，限时 60 s，环境变量 PLUG_ROOT / PLUG_TOOL；stdout 每行一条 WARNING，退出码 2 = ERROR。
+- D21 `search` 行里 `file#Lstart-Lend` 用 1 起的行号（和 Read/sed 一致）；清洗稿段落带 `[m:ss]` 或 `[¶n]` 位置。
+- D22 查询构造：按空白 / 标点切成词；≤4 字的中文词用字二元组短语（"责任 任转 转移"），>4 字的用 jieba 切出的 ≥2 字词；拉丁词小写；全部 OR。别名扩展用同一规则。
