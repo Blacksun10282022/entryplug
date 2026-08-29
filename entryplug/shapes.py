@@ -51,9 +51,10 @@ def split_frontmatter(text):
 
 def sections(body):
     """## 小节 → 文本（保留顺序）。'' 键是首个小节前的正文。"""
-    out, cur = {"": []}, ""
+    out, cur, fence = {"": []}, "", False
     for line in body.splitlines():
-        m = re.match(r"^##\s+(.+?)\s*$", line)
+        fence ^= line.startswith("```")
+        m = None if fence else re.match(r"^##\s+(.+?)\s*$", line)
         if m:
             cur = m.group(1).strip()
             out.setdefault(cur, [])
