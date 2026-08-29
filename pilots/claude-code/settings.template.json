@@ -1,0 +1,40 @@
+{
+  "_readme": [
+    "合进 <内容仓库>/.claude/settings.json。占位 //c/<content-repo> 换成内容仓库的绝对路径（Windows 用 //c/Users/... 形式；路径会被规范成 POSIX）。",
+    "deny 只认 Edit(path) / Read(path)：Write(path) 规则会被接受但从不检查，等于没写。Edit 规则覆盖所有内置改文件的工具（含 Write）。",
+    "不要 deny Read(self/RULES.md)：驾驶员必须能读规则。Read() 只用在它不该读也不该改的东西上（钩子的上次触发戳）。",
+    "deny 在所有模式下生效，含 bypassPermissions；但挡不住脚本直写（原生 Windows 没有沙箱）——兜底是 gates/precommit.py。",
+    "钩子命令里的路径换成你克隆 entryplug 的位置；用插件形式安装时改用 hooks/hooks.json（${CLAUDE_PLUGIN_ROOT}）。"
+  ],
+  "permissions": {
+    "deny": [
+      "Edit(//c/<content-repo>/self/RULES.md)",
+      "Edit(//c/<content-repo>/self/facts/**)",
+      "Edit(//c/<content-repo>/self/style.md)",
+      "Edit(//c/<content-repo>/tools/**/SKILL.md)",
+      "Edit(//c/<content-repo>/tools/**/dict/**)",
+      "Edit(//c/<content-repo>/tools/**/playbooks/**)",
+      "Edit(//c/<content-repo>/tools/**/materials/**)",
+      "Edit(//c/<content-repo>/tools/**/checks/**)",
+      "Edit(//c/<content-repo>/plug.yaml)",
+      "Read(//c/<content-repo>/.kb/hooks/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|WebFetch|mcp__.*",
+        "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/outbound.py\"", "timeout": 30 }]
+      }
+    ],
+    "PreCompact": [
+      { "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\"", "timeout": 30 }] }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\" --emit", "timeout": 30 }]
+      }
+    ]
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "_readme": [
+    "Codex 钩子配置（合进 ~/.codex/hooks.json 或仓库级配置）。同一张出击封锁清单（plug.yaml: outbound）、同一个脚本 gates/outbound.py。",
+    "Codex 的钩子语义与 Claude Code 相同：PreToolUse exit 2 阻断、fail-open、默认 600 s、每个钩子要手动信任一次；字段名以你装的 Codex 版本文档为准（写作时 2026-08，harness 戳见 STATUS.md）。",
+    "占位 //c/<entryplug-repo> 换成你克隆 entryplug 的位置。"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|shell|mcp__.*",
+        "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/outbound.py\"", "timeout": 30 }]
+      }
+    ],
+    "PreCompact": [
+      { "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\"", "timeout": 30 }] }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\" --emit", "timeout": 30 }]
+      }
+    ]
+  }
+}

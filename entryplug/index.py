@@ -200,7 +200,7 @@ def write_playbook_index(cfg, playbooks):
 
 def mirror_skills(cfg):
     """把每件装备的 SKILL.md 复制到各驾驶员的 skills 目录（内容相同则不动）。"""
-    for pilot in cfg["pilots"].values():
+    for name, pilot in cfg["pilots"].items():
         for t in cfg["tools"]:
             src = t["dir"] / "SKILL.md"
             if src.exists():
@@ -208,3 +208,6 @@ def mirror_skills(cfg):
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 if not dst.exists() or dst.read_bytes() != src.read_bytes():
                     shutil.copyfile(src, dst)
+                if name == "codex" and not (dst.parent / "agents" / "openai.yaml").exists():   # Codex 的隐式调用开关不在 frontmatter
+                    (dst.parent / "agents").mkdir(exist_ok=True)
+                    (dst.parent / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: true\n", encoding="utf-8")

@@ -1,0 +1,4 @@
+# 放在 <内容仓库>/.agents/skills/<装备>/agents/openai.yaml（plug index 镜像说明书时会自动写一份，已存在则不动）。
+# Codex 的隐式调用开关不在 SKILL.md frontmatter 里，在这里。
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "entryplug": {
+      "command": "plug",
+      "args": ["mcp"],
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    }
+  }
+}

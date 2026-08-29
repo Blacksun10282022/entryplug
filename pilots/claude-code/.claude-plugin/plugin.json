@@ -1,0 +1,8 @@
+{
+  "name": "entryplug",
+  "version": "0.1.0",
+  "description": "插入栓 / Entryplug: one read-only search (MCP), the sortie lock (PreToolUse hook), the compaction pin. Content repo lives elsewhere; pre-commit and deny rules are installed per content repo (see README).",
+  "author": { "name": "Kyo" },
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}
