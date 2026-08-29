@@ -73,9 +73,9 @@ def main(argv=None):
         if a.contact:
             from . import contact
             return contact.run(cfg, a.contact)
-        from . import check
+        from . import check, report
         r = check.run(cfg, expire=not a.no_expire)
-        print(check.format_findings(r) if a.quiet else check.report(cfg, r))
+        print(report.format_findings(r) if a.quiet else report.report(cfg, r))
         return 1 if r["errors"] else 0
     if a.cmd == "apply":
         from . import apply

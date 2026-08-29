@@ -176,7 +176,7 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         if expire and p["age"] > EXPIRE_DAYS:
             dst = cfg["proposals_dir"] / "rejected" / p["path"].name
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text(p["text"].rstrip("\n") + "\n\nrejected: %s · expired（%d 天未批，plug check 自动移入）\n" % (today, p["age"]), encoding="utf-8")
+            dst.write_text(p["text"].rstrip("\n") + "\n\nrejected: %s · expired（%d 天未批，plug check 自动移入）\n" % (today, p["age"]), encoding="utf-8", newline="\n")
             p["path"].unlink()
             moved.append(p["rel"])
     for m in materials:
@@ -246,29 +246,5 @@ def run(cfg, expire=True, tool_checks=True, today=None):
     from . import numbers
     out["numbers"] = numbers.page(cfg, records, today, docs, anchors, ids)
     cfg["numbers_path"].parent.mkdir(parents=True, exist_ok=True)
-    cfg["numbers_path"].write_text(out["numbers"], encoding="utf-8")
+    cfg["numbers_path"].write_text(out["numbers"], encoding="utf-8", newline="\n")
     return out
-
-
-def format_findings(r):
-    lines = ["%s %s · %s · %s · 核验 %s" % (f["level"], f["code"], f["file"], f["msg"], f["at"]) for f in r["errors"] + r["warnings"]]
-    return "\n".join(lines + ["ERROR %d · WARNING %d" % (len(r["errors"]), len(r["warnings"]))])
-
-
-def report(cfg, r):
-    """一页报告：头部自检 → 清单 → 本周记录 / 分歧 / 待批 / 待填结果 / 过期资料 / 孤立词条 → 同步率。永远没有总分。"""
-    h = r["header"]
-    L = ["# plug check · %s · entryplug %s（钉 %s）· 形状 v%s %s" % (h["at"], h["machine"], h["machine_pin"] or "-", h["shape_version"], "✓" if h["shape_ok"] else "✗ 机器拒跑"),
-         "索引：%s%s · 钩子：%s · 装备：%s" % (h["index_built"] or "无", "（过期）" if h["index_stale"] else "", " ".join("%s=%s" % (k, (v or "从未")[:16]) for k, v in h["hooks"].items()), ", ".join(h["tools"]) or "无"),
-         "", format_findings(r)]
-    if r["moved"]:
-        L.append("移到 rejected/（30 天未批）：" + ", ".join(r["moved"]))
-    recs = r["records"]
-    week = [x["rel"] for x in recs if x["age"] <= 7]
-    dis = [x["rel"] for x in recs if x["fm"].get("chosen") and not (x["fm"].get("chosen") or "").startswith(("同意", "同 ", "按它")) and str(x["fm"].get("chosen")).strip() != str(x["fm"].get("verdict")).strip()]
-    L += ["", "本周记录 %d：%s" % (len(week), ", ".join(week) or "-"), "分歧（verdict ≠ chosen）%d：%s" % (len(dis), ", ".join(dis) or "-"),
-          "待批提议 %d：%s" % (len([p for p in r["proposals"] if p["sub"] == "pending"]), ", ".join(p["rel"] for p in r["proposals"] if p["sub"] == "pending") or "-"),
-          "待填结果（≥30 天）%d：%s" % (len([x for x in recs if not x["fm"].get("outcome") and x["age"] >= 30]), ", ".join(x["rel"] for x in recs if not x["fm"].get("outcome") and x["age"] >= 30) or "-"),
-          "过期资料 %d：%s" % (len([m for m in r["materials"] if m.get("expired")]), ", ".join(m["rel"] for m in r["materials"] if m.get("expired")) or "-"),
-          "孤立词条（无入链）%d：%s" % (len(r["orphans"]), ", ".join(r["orphans"]) or "-"), "", r["numbers"]]
-    return "\n".join(L)

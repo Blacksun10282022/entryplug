@@ -1,6 +1,6 @@
 # 动词 check：示例装备 0 ERROR；每种 ERROR 在临时副本里故意坏一次；主要 WARNING；提议过期搬家；头部自检；同步率的盲判核对。
 from datetime import date
-from entryplug import check, index
+from entryplug import check, index, report
 from conftest import git, plug
 
 TODAY = date(2026, 8, 29)
@@ -29,7 +29,7 @@ def test_example_has_zero_errors_and_known_warnings(repo):
     assert all(f["at"] for f in r["warnings"])
     assert r["header"]["shape_ok"] and r["header"]["tools"] == ["sunzi"] and not r["header"]["index_stale"]
     assert repo["numbers_path"].exists() and "同步率" in r["numbers"] and "总分" in r["numbers"]
-    text = check.report(repo, r)
+    text = report.report(repo, r)
     assert "ERROR 0" in text and "待批提议 1" in text and "过期资料 1" in text and "本周记录" in text
 
 

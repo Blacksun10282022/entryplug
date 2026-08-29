@@ -1,0 +1,75 @@
+# 防泄漏（层①：公开的通用规则，本地与 CI 都跑；层②：主人机器上若有 ~/.kb/leak_terms.txt 就一并扫，词表本身永不提交）。
+# 机器仓库零私人数据：用户绝对路径 · 示例之外的 records/ proposals/ materials/ corpus/ self/ 与 .sqlite · 密钥 / cookie 模式 ·
+# 示例与文档之外的中文长文（>20 KB）· 示例之外的 BV 号 · plug.yaml 样例只许引用示例工具。
+import re, subprocess
+from pathlib import Path
+import yaml
+from conftest import ROOT
+
+USER_PATH = re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+(?!<)|/[cC]/Users/(?!<)|/home/[a-z]\w+/|/Users/[a-z]\w+/")
+SECRETS = [re.compile(p) for p in (r"sk-[A-Za-z0-9]{20,}", r"AKIA[0-9A-Z]{16}", r"-----BEGIN [A-Z ]*PRIVATE KEY", r"ghp_[A-Za-z0-9]{30,}",
+                                   r"(?i)\bcookie\s*[:=]\s*[A-Za-z0-9%=;_\-]{24,}", r"(?i)\bbearer\s+[A-Za-z0-9\-_\.]{24,}")]
+BV = re.compile(r"BV1[0-9A-Za-z]{9}")
+ALLOWED_BV = {"BV1EXAMPLE01"}
+FORBIDDEN = re.compile(r"(^|/)(records|proposals|materials|corpus|self)/")
+CJK = re.compile(r"[一-鿿]")
+TEXT = {".py", ".md", ".yaml", ".yml", ".json", ".toml", ".txt", ".cfg", ".ini", ""}
+
+
+def files():
+    out = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8").stdout
+    return [f for f in out.split("\0") if f and (ROOT / f).is_file()]
+
+
+def texts():
+    for rel in files():
+        p = ROOT / rel
+        if p.suffix.lower() in TEXT:
+            yield rel, p.read_text(encoding="utf-8", errors="replace")
+
+
+def test_no_user_absolute_paths():
+    bad = [(rel, USER_PATH.search(t).group(0)) for rel, t in texts() if USER_PATH.search(t)]
+    assert not bad, bad
+
+
+def test_no_private_dirs_or_sqlite_outside_example():
+    bad = [rel for rel in files() if not rel.startswith("example-tool/") and (FORBIDDEN.search(rel) or rel.endswith(".sqlite"))]
+    assert not bad, bad
+
+
+def test_no_secret_patterns():
+    bad = [(rel, s.pattern) for rel, t in texts() for s in SECRETS if s.search(t)]
+    assert not bad, bad
+
+
+def test_no_bv_ids_outside_example():
+    bad = [(rel, sorted(set(BV.findall(t)) - ALLOWED_BV)) for rel, t in texts() if not rel.startswith("example-tool/") and set(BV.findall(t)) - ALLOWED_BV]
+    assert not bad, bad
+
+
+def test_no_long_chinese_text_outside_example_and_docs():
+    bad = [(rel, len(CJK.findall(t))) for rel, t in texts() if not rel.startswith(("example-tool/", "docs/")) and len(CJK.findall(t)) > 20000]
+    assert not bad, bad
+
+
+def test_plug_yaml_samples_only_reference_example_tool():
+    yamls = [rel for rel in files() if rel.endswith("plug.yaml")]
+    assert yamls and all(rel.startswith("example-tool/") for rel in yamls), yamls
+    for rel in yamls:
+        cfg = yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))
+        for t in cfg.get("tools") or []:
+            path = t.get("path", "tools/%s" % t["name"])
+            assert not Path(path).is_absolute() and ".." not in path and (ROOT / rel).parent.joinpath(path).is_dir(), (rel, path)
+        for key in ("self", "proposals", "index"):
+            assert not Path(str(cfg.get(key, ""))).is_absolute()
+
+
+def test_private_term_list_if_present():
+    """层②：主人机器上的私有词表（名字、邮箱、真实工具名、盘符路径……）。没有词表就跳过；词表本身永不提交。"""
+    p = Path.home() / ".kb" / "leak_terms.txt"
+    if not p.exists():
+        return
+    terms = [l.strip() for l in p.read_text(encoding="utf-8").splitlines() if l.strip() and not l.startswith("#")]
+    bad = [(rel, term) for rel, t in texts() for term in terms if term in t]
+    assert not bad, bad

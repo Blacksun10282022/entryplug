@@ -1,0 +1,41 @@
+# index · 2026-08-29 17:46 · 38 文件 · 107 块 · entryplug 0.1.0
+## tools/sunzi
+- tools/sunzi/SKILL.md · sunzi · manual · 
+- tools/sunzi/READING.md · READING · reading · 
+- tools/sunzi/playbooks/choose-battlefield.md · 先处战地：主动权在谁 · playbook · active
+- tools/sunzi/playbooks/opponent-delays.md · 对方在谈判里拖延 · playbook · diagnostic
+- tools/sunzi/playbooks/opponent-feigns-weakness.md · 对方在示弱 · playbook · warning
+- tools/sunzi/dict/bu-zhan-er-qu.md · 不战而屈人之兵 · concept · 伐谋, 全胜, 不战, win without fighting, buzhan
+- tools/sunzi/dict/fan-jian.md · 反间 · concept · 用间, 五间, 反间计, double agent, fanjian
+- tools/sunzi/dict/gui-dao.md · 诡道 · concept · 诡, 示形, 兵不厌诈, deception, guidao
+- tools/sunzi/dict/miao-suan.md · 庙算 · method · 五事七计, 庙算五事, 先算后战, seven calculations, miaosuan
+- tools/sunzi/dict/qi-zheng.md · 奇正 · concept · 奇与正, 出奇, 以正合以奇胜, surprise and direct, qizheng
+- tools/sunzi/dict/shi.md · 势 · concept · 势能, 态势, 任势, momentum, shi
+- tools/sunzi/dict/xing.md · 形 · concept · 军形, 形势, 不可胜, disposition, xing
+- tools/sunzi/dict/xu-shi.md · 虚实 · concept · 虚与实, 避实击虚, 致人, weak points and strong, xushi
+- tools/sunzi/dict/yu-zhi.md · 迂直之计 · concept · 以迂为直, 迂直, 后人发先人至, indirect route, yuzhi
+- tools/sunzi/dict/zhi-bi-zhi-ji.md · 知彼知己 · concept · 知己知彼, 先知, 百战不殆, know the enemy and yourself, zhibizhiji
+- tools/sunzi/materials/2026-07-10-market-price.md · 示例·某品类 7 月市场价（虚构） · price · 2026-07-10
+- tools/sunzi/materials/2026-08-25-counterpart-profile.md · 示例·合作方 C 的情况（虚构） · profile · 2026-08-25
+- tools/sunzi/corpus/clean/talk-2026-08-01-shi.md · 示例讲座｜势与形：把谈判当成一张桌子（虚构） · lecture · 2026-08-01
+- tools/sunzi/corpus/raw/sunzi-01-shiji.md · 孙子兵法｜始计第一 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-02-zuozhan.md · 孙子兵法｜作战第二 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-03-mougong.md · 孙子兵法｜谋攻第三 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-04-junxing.md · 孙子兵法｜军形第四 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-05-bingshi.md · 孙子兵法｜兵势第五 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-06-xushi.md · 孙子兵法｜虚实第六 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-07-junzheng.md · 孙子兵法｜军争第七 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-08-jiubian.md · 孙子兵法｜九变第八 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-09-xingjun.md · 孙子兵法｜行军第九 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-10-dixing.md · 孙子兵法｜地形第十 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-11-jiudi.md · 孙子兵法｜九地第十一 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-12-huogong.md · 孙子兵法｜火攻第十二 · book · 2026-08-29
+- tools/sunzi/corpus/raw/sunzi-13-yongjian.md · 孙子兵法｜用间第十三 · book · 2026-08-29
+## self · proposals
+- self/RULES.md · RULES · rules · 
+- self/style.md · style · style · 
+- self/facts/example.md · example · facts · 
+- self/records/2026-07-20-supplier-delay.md · 供应商（虚构）对我方报价沉默三周，中间只回「在走流程」；主人问要不要主动降价催一下 · record · claude-code · claude-fable-5 · 2026-07-20
+- self/records/2026-08-21-counterpart-feigns-weakness.md · 合作方（虚构）在最后一轮说「我们预算真的只剩这么多，再让 5% 就签」；主人问要不要让 · record · codex · gpt-5 · 2026-08-21
+- self/records/2026-08-27-choose-venue.md · 下周的价格谈判，对方（虚构）提议去他们办公室谈；主人问去不去 · record · claude-code · claude-fable-5 · 2026-08-27
+- proposals/pending/2026-08-26-shi-alias.md · tools/sunzi/dict/shi.md · proposal · 

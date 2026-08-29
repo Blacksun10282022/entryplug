@@ -180,7 +180,7 @@ def write_index_md(cfg, entries, stats):
         if rows:
             lines.append("## %s" % (("tools/" + tool) if tool else "self · proposals"))
             lines += ["- %s · %s · %s · %s" % (e[2], e[4], e[5], e[6]) for e in rows]
-    cfg["index_md_path"].write_text("\n".join(lines) + "\n", encoding="utf-8")
+    cfg["index_md_path"].write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def write_playbook_index(cfg, playbooks):
@@ -195,7 +195,7 @@ def write_playbook_index(cfg, playbooks):
         new = [(rel, tg) for rel, tg in playbooks.get("_pending", []) if "/playbooks/" in tg and not (cfg["root"] / tg).exists()]
         if new:
             lines += ["", "## 待批的「无打法」提议"] + ["- %s → %s" % x for x in new]
-        (t["dir"] / "playbooks" / "INDEX.md").write_text("\n".join(lines[:60]) + "\n", encoding="utf-8")
+        (t["dir"] / "playbooks" / "INDEX.md").write_text("\n".join(lines[:60]) + "\n", encoding="utf-8", newline="\n")
 
 
 def mirror_skills(cfg):
@@ -210,4 +210,4 @@ def mirror_skills(cfg):
                     shutil.copyfile(src, dst)
                 if name == "codex" and not (dst.parent / "agents" / "openai.yaml").exists():   # Codex 的隐式调用开关不在 frontmatter
                     (dst.parent / "agents").mkdir(exist_ok=True)
-                    (dst.parent / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: true\n", encoding="utf-8")
+                    (dst.parent / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: true\n", encoding="utf-8", newline="\n")

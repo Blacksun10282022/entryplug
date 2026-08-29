@@ -48,9 +48,9 @@ def main(argv):
     if event == "PreCompact":
         text = pin(cfg)
         cfg["pin_path"].parent.mkdir(parents=True, exist_ok=True)
-        cfg["pin_path"].write_text(text + "\n", encoding="utf-8")
+        cfg["pin_path"].write_text(text + "\n", encoding="utf-8", newline="\n")
         cfg["hooks_dir"].mkdir(parents=True, exist_ok=True)
-        (cfg["hooks_dir"] / "precompact").write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8")
+        (cfg["hooks_dir"] / "precompact").write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8", newline="\n")
         print(text)
         return 0
     text = cfg["pin_path"].read_text(encoding="utf-8") if cfg["pin_path"].exists() else pin(cfg)

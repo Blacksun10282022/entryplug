@@ -22,3 +22,14 @@
 - D20 通用挂点：`checks/*.py` 以子进程跑，限时 60 s，环境变量 PLUG_ROOT / PLUG_TOOL；stdout 每行一条 WARNING，退出码 2 = ERROR。
 - D21 `search` 行里 `file#Lstart-Lend` 用 1 起的行号（和 Read/sed 一致）；清洗稿段落带 `[m:ss]` 或 `[¶n]` 位置。
 - D22 查询构造：按空白 / 标点切成词；≤4 字的中文词用字二元组短语（"责任 任转 转移"），>4 字的用 jieba 切出的 ≥2 字词；拉丁词小写；全部 OR。别名扩展用同一规则。
+- D23 deny 模板只用 `Edit()`（官方：Edit 规则覆盖所有内置改文件的工具，含 Write；`Write()` 规则从不被检查）；不 deny `Read(self/RULES.md)`，否则驾驶员读不了规则；`Read()` 只用在 `.kb/hooks/**`（驾驶员不该读也不该改的戳）。
+- D24 初期接触第 ④ 步：pre-commit 真跑（PLUG_STAGED 模拟暂存区），deny 只核 settings 文件里有没有 `Edit(…self/RULES.md)`——机器不起 Claude Code 本身；bypass 下是否真拦留给验收 C1.2 手动核。
+- D25 「新条目入链 <3」与「孤立词条」只算词典条目（concept / method）；打法靠 INDEX.md 被找到，不靠链接。
+- D26 索引新旧不用 mtime（同一秒内改动测不出），用 `files` 表里的文件哈希对比。
+- D27 教材分块以段落为单位（空行分隔；清洗稿一行一段带 [m:ss]），段落 >800 字才切 600/100 滑窗；条目 / 记录 / 资料整页一块（BM25 偏爱短块，按段落切会让「## 注」压过「## 定义」）。
+- D28 提议索引进独立的 scope `proposals`（默认 tools 查不到，scope=all 才见），否则含整文件代码块的提议会压过词典条目本身。
+- D29 `plug apply` 落地后再 `plug index` 一次：提议离开 pending，打法目录里的「待批」要跟着消失。
+- D30 记录里的「上次」判定：依据小节含「上次」或 `records/` 即算四要素里的那一要素；第一条记录写「无类似记录」也算齐全。
+- D31 一页报告的排版从 check.py 拆到 report.py（check.py 超过 250 行的硬上限；check 只找问题，report 只排版）。包里 13 个文件、约 1,550 行，其中 130 行是规定的文件头注释；超出「≈1,000（≤ ~1,300）」的部分主要在 check 的 8 类 ERROR + 16 类 WARNING 各 3–6 行，没有再压——压了就读不懂。
+- D32 生成物 index.md · playbooks/INDEX.md · self/数字.md 在示例装备里随仓库提交（展示机器产出）；.kb/ 与镜像的 skills 目录 gitignore。
+- D33 写文件一律 newline="\n"（Windows 上 write_text 默认会把 LF 换成 CRLF，改变 base 短哈希，验收 C2.4 就是这么发现的）。

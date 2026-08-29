@@ -1,0 +1,8 @@
+# 打法目录 · sunzi · 由 plug index 生成，勿手改
+命中不是义务。选不出就报无打法，照常分析。
+
+| id | stance | situation | when_not |
+|---|---|---|---|
+| choose-battlefield | active | 要定谈判的时间、地点、议程；对方已经先提了一个方案 | 对方是明显强势方且你只想尽快结束；或议题本身不值得争主客 |
+| opponent-delays | diagnostic | 对方回得慢、只说「在走流程」、一再改期；你开始想主动让步催一下 | 对方已给出书面的时间表；或拖延的是你自己 |
+| opponent-feigns-weakness | warning | 对方说「我们真的只剩这么多」「再让一点就签」；你开始觉得不让不近人情 | 对方拿出了可核的账；或你手里本来就没有再让的空间 |

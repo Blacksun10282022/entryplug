@@ -86,7 +86,7 @@ def run(cfg, proposal, reject=None, dry_run=False):
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(p["content"].encode("utf-8"))
-    from . import index, check
+    from . import index, check, report
     index.build(cfg)
     r = check.run(cfg, expire=False)
     if r["errors"]:
@@ -97,7 +97,7 @@ def run(cfg, proposal, reject=None, dry_run=False):
         else:
             target.write_bytes(current)
         index.build(cfg)
-        print("apply: 体检有 ERROR，已回滚：\n" + check.format_findings({"errors": r["errors"], "warnings": []}))
+        print("apply: 体检有 ERROR，已回滚：\n" + report.format_findings({"errors": r["errors"], "warnings": []}))
         return 1
     applied = cfg["proposals_dir"] / "applied" / ppath.name
     applied.parent.mkdir(parents=True, exist_ok=True)
