@@ -173,8 +173,8 @@ def parse_doc(text, path, sub=None):
     sep = [i for i, l in enumerate(lines) if SEP.match(l)]
     if fm:
         meta = {k: fm.get(k) for k in ("id", "title", "date", "kind", "speaker", "series")}
-        body_start = len(lines) - len(body.splitlines()) if body.strip() else len(lines)
-        units = [(body_start + 1, len(lines), "", body.strip())]
+        fm_lines = text[:len(text) - len(body)].count("\n")
+        units = [(fm_lines + 1, len(lines), "", "\n".join(lines[fm_lines:]))]
     elif sep:
         for l in lines[:sep[0]]:
             m = RE_HEAD.match(l)
@@ -188,13 +188,11 @@ def parse_doc(text, path, sub=None):
             m = RE_PARA.match(lines[i])
             if m and m.group(2).strip():
                 units.append((i + 1, i + 1, m.group(1), m.group(2).strip()))
-        if not units:
-            chunk = "\n".join(lines[start + 1:end]).strip()
-            if chunk:
-                units = [(start + 2, end, "", chunk)]
+        if not units and "".join(lines[start + 1:end]).strip():
+            units = [(start + 2, end, "", "\n".join(lines[start + 1:end]))]
         meta["kind"] = meta.get("kind") or ("lecture" if meta.get("id") or (units and units[0][2]) else "text")
     else:
-        units = [(1, len(lines), "", text.strip())]
+        units = [(1, len(lines), "", "\n".join(lines))]
     title = str(meta.get("title") or (lines[0].lstrip("# ").strip() if lines else path.stem))
     doc_id = str(meta.get("id") or path.stem)
     sm = re.match(r"^(.+?)\s*[｜|·—\-：:]\s*.+$", title)
