@@ -13,11 +13,14 @@
 ## 安装（每个内容仓库一次）
 
 ```
-cp gates/hooks/pre-commit <内容仓库>/.git/hooks/pre-commit   # 改里面的路径
-# Claude Code：把 pilots/claude-code/settings.template.json 合进 <内容仓库>/.claude/settings.json，改占位路径
-# Codex：把 pilots/codex/hooks.json 合进 ~/.codex/hooks.json（或仓库级），改占位路径；每个钩子要手动信任一次
+cd <内容仓库>
+plug init --pilot both               # 装 .git/hooks/pre-commit（别人的先备份）、.claude/settings.json 的 deny + 钩子（合并）、
+                                     # .mcp.json、CLAUDE.md / AGENTS.md（缺席时）、说明书镜像、.codex/hooks.json + config.toml；全部真实绝对路径，幂等
+plug index
 plug check --contact claude-code     # 初期接触四步，全绿才算接上
-plug check --contact codex
+plug check --contact codex           # Codex 每个钩子首次要手动信任一次
 ```
+
+手动装法（不想用 init 时）：`gates/hooks/pre-commit` 复制到 `<内容仓库>/.git/hooks/pre-commit` 改路径；`pilots/claude-code/settings.template.json` 合进 `.claude/settings.json`；`pilots/codex/hooks.json` 合进 `~/.codex/hooks.json` 或仓库级 `.codex/hooks.json`。
 
 规矩：钩子不改写工具输入（updatedInput）、不往 prompt 塞检索结果、不开机注入规则全文、没有 Stop 钩子催写。

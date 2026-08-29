@@ -48,8 +48,11 @@ def handle(cfg, msg):
             return None, {"code": -32602, "message": "只有一个工具：search"}
         if not a.get("query"):
             return {"content": [{"type": "text", "text": "query 不能为空"}], "isError": True}, None
-        res = search.search(cfg, a["query"], scope=a.get("scope", "tools"), tool=a.get("tool"), kind=a.get("kind"),
-                            k=a.get("k", 8), per_doc=a.get("per_doc", 2))
+        try:
+            res = search.search(cfg, a["query"], scope=a.get("scope", "tools"), tool=a.get("tool"), kind=a.get("kind"),
+                                k=a.get("k", 8), per_doc=a.get("per_doc", 2))
+        except FileNotFoundError as e:           # 没索引：当工具错误回，不当协议错误
+            return {"content": [{"type": "text", "text": str(e)}], "isError": True}, None
         return {"content": [{"type": "text", "text": search.format_rows(res)}], "isError": False}, None
     return None, {"code": -32601, "message": "没有这个方法：%s" % m}
 

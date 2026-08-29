@@ -38,12 +38,14 @@ def parser():
     p = sub.add_parser("eval", help="金标 recall@10；中文查询 recall 为零 = ERROR")
     p.add_argument("goldset")
     p.add_argument("--k", type=int, default=10)
-    p = sub.add_parser("search", help="查（与 MCP search 同一函数）")
+    p = sub.add_parser("search", help="查（与 MCP search 同一函数；默认只查词典 · 打法 · 记录，教材要 --scope corpus）")
     p.add_argument("queries", nargs="+")
-    p.add_argument("--scope", default="tools", choices=["tools", "corpus", "all"])
+    p.add_argument("--scope", default="tools", choices=["tools", "corpus", "all"], help="tools = 词典 · 打法 · 记录（默认）· corpus = 教材 · all")
     p.add_argument("--tool"), p.add_argument("--kind")
     p.add_argument("--k", type=int, default=8), p.add_argument("--per-doc", type=int, default=2)
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("init", help="把闸门与驾驶员薄壳装进内容仓库（pre-commit · deny · 钩子 · .mcp.json · 地图 · 镜像），幂等")
+    p.add_argument("--pilot", choices=["claude-code", "codex", "both"], default="both")
     sub.add_parser("mcp", help="stdio MCP 服务（唯一工具 search）")
     p = sub.add_parser("hash", help="算文件的 base 短哈希（写提议用）")
     p.add_argument("file")
@@ -85,10 +87,17 @@ def main(argv=None):
         return ev.run(cfg, a.goldset, k=a.k)
     if a.cmd == "search":
         from . import search
-        res = search.search(cfg, a.queries, scope=a.scope, tool=a.tool, kind=a.kind, k=a.k, per_doc=a.per_doc)
+        try:
+            res = search.search(cfg, a.queries, scope=a.scope, tool=a.tool, kind=a.kind, k=a.k, per_doc=a.per_doc)
+        except FileNotFoundError as e:
+            print("plug: %s" % e, file=sys.stderr)
+            return 1
         import json
         print(json.dumps(res, ensure_ascii=False, indent=1) if a.json else search.format_rows(res))
         return 0
+    if a.cmd == "init":
+        from . import init
+        return init.run(cfg, a.pilot)
     if a.cmd == "mcp":
         from . import mcp
         return mcp.serve(cfg)

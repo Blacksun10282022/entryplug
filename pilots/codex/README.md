@@ -2,6 +2,8 @@
 
 两个驾驶员平权：一切状态都是内容仓库里的文件，切换 = 换个人读同一个文件夹。
 
+最短路径：在内容仓库里跑 `plug init --pilot codex`——写 AGENTS.md（缺席时）、镜像说明书 + `agents/openai.yaml`、仓库级 `.codex/hooks.json` 与 `.codex/config.toml`（`[mcp_servers.entryplug]`）、pre-commit 钩子；若你的 Codex 只读 `~/.codex/`，把这两份合过去。手动装法如下：
+
 1. `AGENTS.md` → 复制为 `<内容仓库>/AGENTS.md`，填 `<tool-…>`（和 CLAUDE.md 是同一份地图）。
 2. 说明书：`plug index` 已把每件装备的 `SKILL.md` 镜像到 `<内容仓库>/.agents/skills/<装备>/SKILL.md`，并放好 `agents/openai.yaml`（`allow_implicit_invocation: true`，Codex 的隐式调用开关不在 frontmatter，见 `agents-openai.yaml`）。
    想只留一份副本，也可以用目录链接代替镜像（Windows）：`mklink /J .agents\skills .claude\skills`，然后在 plug.yaml 里删掉 codex 的 skills 行。

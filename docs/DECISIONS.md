@@ -33,3 +33,5 @@
 - D31 一页报告的排版从 check.py 拆到 report.py（check.py 超过 250 行的硬上限；check 只找问题，report 只排版）。包里 13 个文件、约 1,550 行，其中 130 行是规定的文件头注释；超出「≈1,000（≤ ~1,300）」的部分主要在 check 的 8 类 ERROR + 16 类 WARNING 各 3–6 行，没有再压——压了就读不懂。
 - D32 生成物 index.md · playbooks/INDEX.md · self/数字.md 在示例装备里随仓库提交（展示机器产出）；.kb/ 与镜像的 skills 目录 gitignore。
 - D33 写文件一律 newline="\n"（Windows 上 write_text 默认会把 LF 换成 CRLF，改变 base 短哈希，验收 C2.4 就是这么发现的）。
+- D34 `plug init`：钩子装到 .git/hooks/pre-commit（git pull 不动它，Windows 下 git 用 sh 跑；主人设了 core.hooksPath 就装到那里；别人的 pre-commit 改名备份）；Claude Code 的 deny 与钩子都合进 .claude/settings.json（Claude Code 不读 .claude/hooks.json）；.mcp.json 与 .codex/config.toml 用当前解释器绝对路径 + `-m entryplug.cli --root <root> mcp`，不依赖 plug 在 PATH；Codex 写仓库级 .codex/hooks.json（用户级 ~/.codex 不碰，主人自己合并）。生成的驾驶员文件带本机绝对路径，是本机的。
+- D35 `search` 0/0 不再哑着：尾行说明范围（默认 tools 只查词典 · 打法 · 记录；教材要 scope=corpus）与索引建成时间；没有索引时 CLI 报「先 plug index」退出 1，MCP 回 isError 文本。CLI 与 MCP 本来就是同一函数、同一默认 scope——主人那次 `plug search 责任` 是查了 tools 范围，「责任」只在教材里。

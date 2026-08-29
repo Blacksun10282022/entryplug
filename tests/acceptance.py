@@ -37,11 +37,9 @@ def setup():
     (root / ".gitignore").write_text(".kb/\n.claude/skills/\n.agents/skills/\n", encoding="utf-8", newline="\n")
     git(root, "init", "-q", "-b", "main"), git(root, "config", "user.name", "acc"), git(root, "config", "user.email", "acc@example.com")
     git(root, "add", "-A"), git(root, "commit", "-q", "-m", "init")
-    hook = root / ".git/hooks/pre-commit"
-    hook.write_text("#!/bin/sh\nexec \"%s\" \"%s\"\n" % (sys.executable.replace("\\", "/"), str(GATES / "precommit.py").replace("\\", "/")), encoding="utf-8")
-    tmpl = json.loads((ROOT / "pilots/claude-code/settings.template.json").read_text(encoding="utf-8"))
-    (root / ".claude").mkdir(exist_ok=True)
-    (root / ".claude/settings.json").write_text(json.dumps({"permissions": tmpl["permissions"]}, ensure_ascii=False), encoding="utf-8", newline="\n")
+    r = plug(root, "init", "--pilot", "both")             # 装钩子 + 两个驾驶员的薄壳（真实绝对路径）
+    ok = r.returncode == 0 and (root / ".git/hooks/pre-commit").exists() and (root / ".claude/settings.json").exists() and (root / ".codex/hooks.json").exists()
+    item("C0.0", "plug init --pilot both 装好 pre-commit、deny 规则、钩子、.mcp.json、地图、镜像", ok, [l for l in r.stdout.splitlines() if "pre-commit" in l][:1])
     plug(root, "index")
     return root
 

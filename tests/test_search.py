@@ -57,6 +57,21 @@ def test_format_rows_and_cli(repo):
     assert json.loads(r.stdout)["queries"]
 
 
+def test_zero_hits_explain_scope_and_missing_index_is_loud(repo):
+    r = plug(repo["root"], "search", "责任")                       # 「责任」只在教材里：tools 范围 0 命中，尾行必须说清
+    assert r.returncode == 0 and r.stdout.startswith("已显示 0/0 · 范围 tools 无命中") and "scope=corpus" in r.stdout and "索引建于" in r.stdout
+    r = plug(repo["root"], "search", "责任", "--scope", "corpus")
+    assert r.stdout.startswith("BV1EXAMPLE01#5")
+    text = search.format_rows(search.search(repo, "责任", scope="corpus"))
+    assert "已显示 1/1" in text.splitlines()[-1] and "无命中" not in text
+    repo["index_path"].unlink()
+    r = plug(repo["root"], "search", "责任")
+    assert r.returncode == 1 and "先 plug index" in r.stderr and r.stdout == ""
+    from entryplug import mcp
+    res, err = mcp.handle(repo, {"method": "tools/call", "params": {"name": "search", "arguments": {"query": "责任"}}})
+    assert err is None and res["isError"] is True and "先 plug index" in res["content"][0]["text"]
+
+
 def test_fts_query_construction():
     assert search.fts_query("责任转移", []) == '"责任 任转 转移" OR "责任" OR "转移"' or search.fts_query("责任转移", []).startswith('"责任 任转 转移"')
     q = search.fts_query("对方在谈判里拖延 delay", [])

@@ -13,6 +13,7 @@
 | `plug check` | 体检：ERROR / WARNING 逐项带时间戳，头部自检（形状版本 · 索引新旧 · 钩子上次触发 · 挂了哪些装备），跑装备自带的 `checks/`，30 天没批的改装申请移到 rejected/，一页报告 + 同步率（数字页）。永远没有总分。`--contact claude-code\|codex` = 初期接触四步 |
 | `plug apply` | 批一条改装申请：核 base 短哈希 → add / replace / retire → 体检 0 ERROR → git 提交（trailer 记提议 sha）。base 不匹配整体拒绝，绝不静默覆盖 |
 | `plug eval` | 金标 recall@10；中文查询 recall 为零 = ERROR |
+| `plug init --pilot claude-code\|codex\|both` | 把闸门和驾驶员薄壳装进一个内容仓库：pre-commit 钩子、`.claude/settings.json` 的 deny 规则与钩子（合并，不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md 地图（只在缺席时）、说明书镜像、`.codex/hooks.json` 与 `.codex/config.toml`——全部写真实绝对路径；幂等，打印每个文件的动作 |
 
 两条禁令由 `gates/` 执行，不靠提示词：**暴走封锁**（不改规则和装备、不造新装备，只写改装申请）= git pre-commit + Claude Code deny 规则；**出击封锁**（不以主人名义对外做事，先问）= PreToolUse 钩子，Claude Code / Codex 用同一张清单。外加一个压缩钉子。
 
@@ -29,7 +30,9 @@ python -m pytest            # 每个动词、每道闸门、每种 ERROR 各一�
 python tests/acceptance.py  # 验收剧本 C0–C4，机器项 PASS/FAIL，手动项 MANUAL
 ```
 
-自己的内容仓库照 `example-tool/` 的样子建（`plug.yaml` 是内容仓库里唯一允许出现路径的地方），接入见 `pilots/claude-code/` 与 `pilots/codex/`，闸门安装见 `gates/README.md`，形状见 `docs/SHAPES.md`。
+自己的内容仓库照 `example-tool/` 的样子建（`plug.yaml` 是内容仓库里唯一允许出现路径的地方），然后在里面跑 `plug init --pilot both` 装闸门和驾驶员薄壳，再 `plug index` 与 `plug check --contact claude-code`（或 `codex`）四步全绿。接入细节见 `pilots/claude-code/` 与 `pilots/codex/`，闸门见 `gates/README.md`，形状见 `docs/SHAPES.md`。
+
+`plug search` 默认只查词典 · 打法 · 记录；查教材要 `--scope corpus`（MCP 同样是 `scope=corpus`）。没有命中时尾行会说明范围与索引时间；没有索引会直接报「先 plug index」。
 
 ## 仓库
 

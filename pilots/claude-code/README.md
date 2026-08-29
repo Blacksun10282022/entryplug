@@ -1,6 +1,6 @@
 # pilots/claude-code · Claude Code 接入
 
-薄壳，不含任何内容。两种装法，选一种：
+薄壳，不含任何内容。最短路径：在内容仓库里跑 `plug init --pilot claude-code`——它做完下面 A 的 1–5（真实绝对路径、合并不覆盖、幂等），然后 `plug index`、`plug check --contact claude-code`。手动装法如下：
 
 **A. 项目级（推荐，内容仓库自带）**
 1. `pilots/claude-code/CLAUDE.md` → 复制为 `<内容仓库>/CLAUDE.md`，填 `<tool-…>`。

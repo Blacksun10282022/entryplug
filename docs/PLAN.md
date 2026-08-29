@@ -17,7 +17,9 @@
 | `contact.py` | `plug check --contact <pilot>`：初期接触四步 smoke | cfg + pilot → 四行结果 | cli |
 | `apply.py` | `plug apply <proposal>`：核 base 短哈希 → add / replace / retire → check 0 ERROR → git commit（trailer 记提议 sha）；`--reject` 移到 rejected | proposal → commit | 主人 |
 | `eval.py` | `plug eval <goldset.yaml>`：recall@10；中文查询 recall 为零 = ERROR | goldset → 表 | 主人 · bench |
-| `cli.py` | argparse 分发五个动词 + `mcp`；stdout 强制 UTF-8 | argv → exit code | 命令 `plug` |
+| `init.py` | `plug init --pilot …`：把 pre-commit 钩子、deny 规则与钩子（合并）、.mcp.json、地图、说明书镜像、.codex 配置装进内容仓库（真实绝对路径、幂等） | cfg + pilot → 文件动作清单 | 主人 · acceptance |
+| `report.py` | check 结果的排版：逐项清单 + 一页报告 | check.run 结果 → 文本 | cli · apply |
+| `cli.py` | argparse 分发五个动词 + `mcp` · `init` · `hash`；stdout 强制 UTF-8 | argv → exit code | 命令 `plug` |
 
 ## 仓库其余
 

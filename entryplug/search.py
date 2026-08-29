@@ -53,6 +53,8 @@ def fts_query(query, groups):
 
 
 def open_ro(cfg):
+    if not cfg["index_path"].exists():
+        raise FileNotFoundError("没有索引 %s：先 plug index" % cfg["index"])
     return sqlite3.connect("file:%s?mode=ro" % cfg["index_path"].as_posix(), uri=True)
 
 
@@ -105,7 +107,7 @@ def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2):
     rows = [{"id": r[0], "doc": r[1], "source": r[2], "tool": r[3], "kind": r[4], "file": r[5], "lstart": r[6], "lend": r[7],
              "pos": r[8], "excerpt": r[9], "title_hit": any(len(q) >= 2 and q in titles.get(r[1], r[2]) for q in queries + expand(qtext, groups))}
             for r in shown]
-    return {"rows": rows, "shown": len(rows), "total": len(cands), "queries": used}
+    return {"rows": rows, "shown": len(rows), "total": len(cands), "queries": used, "scope": scope, "built_at": meta.get("built_at")}
 
 
 def format_rows(res):
@@ -113,5 +115,9 @@ def format_rows(res):
     for r in res["rows"]:
         loc = "%s#L%s-L%s" % (r["file"], r["lstart"], r["lend"]) + (" [%s]" % r["pos"] if r["pos"] else "")
         lines.append("%s · %s · %s · %s · %s%s" % (r["id"], r["source"], loc, r["kind"], r["excerpt"], " · 标题命中，可整讲读" if r["title_hit"] else ""))
-    lines.append("已显示 %d/%d" % (res["shown"], res["total"]))
+    tail = "已显示 %d/%d" % (res["shown"], res["total"])
+    if not res["total"]:                    # 0/0 不能哑着：说清范围与索引时间
+        hint = {"tools": "（默认只查词典 · 打法 · 记录；查教材加 scope=corpus）", "corpus": "（只查了教材；查词典 · 打法 · 记录用 scope=tools）"}.get(res.get("scope"), "")
+        tail += " · 范围 %s 无命中%s · 索引建于 %s" % (res.get("scope"), hint, res.get("built_at") or "未知（先 plug index）")
+    lines.append(tail)
     return "\n".join(lines)
