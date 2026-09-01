@@ -13,6 +13,24 @@ def rows(cfg, sql, *args):
         con.close()
 
 
+def test_rebuilding_unchanged_content_leaves_index_md_byte_identical(repo):
+    """index.md is tracked by git and rebuilt by pre-commit on every commit, so anything in it that changes on its
+    own leaves the working tree dirty for ever. New in this build — the header carried a wall clock, so every
+    commit ended with a one-line diff that meant nothing; it once blocked a filter-branch. The build time lives in
+    the index meta (`built_at`) and `plug check` prints it, so nothing is lost by keeping it out of the file."""
+    md = repo["root"] / "index.md"
+    index.build(repo, full=True)
+    first = md.read_bytes()
+    index.build(repo, full=True)
+    assert md.read_bytes() == first, "a rebuild with no content change must not touch index.md"
+    assert first.startswith("# index · ".encode()) and " files · ".encode() in first, "the header still names the counts"
+    (repo["root"] / "self" / "records" / "2026-08-30-a-new-one.md").write_text(
+        "---\ntool: none\nby: t\nsituation: s\nverdict: v\nchosen:\noutcome:\n---\n\n## 依据\nx\n\n## 最强反证\nx\n\n## 什么会改判\nx\n",
+        encoding="utf-8")
+    index.build(repo, full=True)
+    assert md.read_bytes() != first, "real content changes must still show up"
+
+
 def test_build_is_one_fts_table_and_incremental(repo):
     names = {r[0] for r in rows(repo, "select name from sqlite_master where type='table' and name not like 'fts_%'")}
     assert names == {"fts", "files", "meta"}

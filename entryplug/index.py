@@ -188,8 +188,11 @@ def build(cfg, full=False):
 
 
 def write_index_md(cfg, entries, stats):
-    """Human-readable index: one line per page."""
-    lines = ["# index · %s · %d files · %d chunks · entryplug %s" % (time.strftime("%Y-%m-%d %H:%M"), len(entries), stats["chunks"], __version__)]
+    """Human-readable index: one line per page. No build time in the header — the file is tracked by git and
+    rebuilt by pre-commit on every commit, so a wall clock here left the working tree permanently dirty by one
+    line that meant nothing (D64). Rebuilding now produces the same bytes unless the content actually changed.
+    The build time lives in the index's own meta (`built_at`) and `plug check` prints it."""
+    lines = ["# index · %d files · %d chunks · entryplug %s" % (len(entries), stats["chunks"], __version__)]
     for tool in [t["name"] for t in cfg["tools"]] + [None]:
         rows = [e for e in entries if e[0] == tool]
         if rows:
