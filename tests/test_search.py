@@ -1,4 +1,5 @@
-# 动词 search：中文两字词命中（ERROR 级验收）、别名扩展、默认只查工具、scope=corpus 明说、多组查询合并、行格式、不重排。
+# Verb search: a two-character Chinese word hits (ERROR-grade acceptance), alias expansion, the default scope is
+# the equipment layer, corpus needs saying, several queries merge, the row format, no reranking.
 import json
 from entryplug import search
 from conftest import plug
@@ -49,7 +50,7 @@ def test_format_rows_and_cli(repo):
     text = search.format_rows(search.search(repo, "诡道", k=2))
     lines = text.splitlines()
     assert lines[0].startswith("gui-dao · 诡道 · tools/sunzi/dict/gui-dao.md#L") and " · concept · " in lines[0]
-    assert lines[-1].startswith("已显示 2/")
+    assert lines[-1].startswith("showing 2/")
     assert len(lines[0].split(" · ")[4]) <= 120
     r = plug(repo["root"], "search", "诡道", "--k", "1")
     assert r.returncode == 0 and r.stdout.startswith("gui-dao")
@@ -58,18 +59,18 @@ def test_format_rows_and_cli(repo):
 
 
 def test_zero_hits_explain_scope_and_missing_index_is_loud(repo):
-    r = plug(repo["root"], "search", "责任")                       # 「责任」只在教材里：tools 范围 0 命中，尾行必须说清
-    assert r.returncode == 0 and r.stdout.startswith("已显示 0/0 · 范围 tools 无命中") and "scope=corpus" in r.stdout and "索引建于" in r.stdout
+    r = plug(repo["root"], "search", "责任")                       # 责任 lives only in the corpus: 0 hits in tools, the tail must say so
+    assert r.returncode == 0 and r.stdout.startswith("showing 0/0 · no hit in scope tools") and "scope=corpus" in r.stdout and "index built" in r.stdout
     r = plug(repo["root"], "search", "责任", "--scope", "corpus")
     assert r.stdout.startswith("BV1EXAMPLE01#5")
     text = search.format_rows(search.search(repo, "责任", scope="corpus"))
-    assert "已显示 1/1" in text.splitlines()[-1] and "无命中" not in text
+    assert "showing 1/1" in text.splitlines()[-1] and "no hit" not in text
     repo["index_path"].unlink()
     r = plug(repo["root"], "search", "责任")
-    assert r.returncode == 1 and "先 plug index" in r.stderr and r.stdout == ""
+    assert r.returncode == 1 and "run plug index first" in r.stderr and r.stdout == ""
     from entryplug import mcp
     res, err = mcp.handle(repo, {"method": "tools/call", "params": {"name": "search", "arguments": {"query": "责任"}}})
-    assert err is None and res["isError"] is True and "先 plug index" in res["content"][0]["text"]
+    assert err is None and res["isError"] is True and "run plug index first" in res["content"][0]["text"]
 
 
 def test_fts_query_construction():

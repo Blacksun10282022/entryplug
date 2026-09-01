@@ -1,9 +1,10 @@
-# 公开小金标 · 示例装备《孙子兵法》· plug eval 的输入格式（见 bench/README.md）
-# 只测机械指标：期望的 doc / 条目 id 有没有进前 k。中文查询 recall 为零 = ERROR。
+# The public mini gold set · the Sunzi example equipment · input format for plug eval (see bench/README.md).
+# One mechanical metric only: did the expected doc / entry id make the top k? Zero recall on Chinese = ERROR.
+# The queries themselves are data and stay in Chinese — that is the whole point of the test.
 version: 1
-scope: corpus            # 缺省 scope；case 可单独覆盖
+scope: corpus            # default scope; a case may override it
 cases:
-  # —— 中文：原文词、两字词、四字短语、口语改写 ——
+  # —— Chinese: source terms, two-character words, four-character phrases, colloquial rewrites ——
   - {id: zh-01, q: 诡道, expect: [sunzi-01-shiji]}
   - {id: zh-02, q: 奇正, expect: [sunzi-05-bingshi]}
   - {id: zh-03, q: 虚实, expect: [sunzi-05-bingshi, sunzi-06-xushi]}
@@ -24,10 +25,10 @@ cases:
   - {id: zh-18, q: 九地, expect: [sunzi-11-jiudi]}
   - {id: zh-19, q: 庙算 五事七计, scope: tools, expect: [miao-suan]}
   - {id: zh-20, q: 用间有五, expect: [sunzi-13-yongjian]}
-  # —— 故意的错字 / 口语（预期 recall 偏低，只登记不遮掩）——
+  # —— deliberate typos / colloquial phrasing (recall is expected to be lower; recorded, not hidden) ——
   - {id: zh-typo-01, q: 诡到, expect: [sunzi-01-shiji]}
   - {id: zh-typo-02, q: 虚势 攻其无备, expect: [sunzi-01-shiji]}
-  # —— 英文 / 拼音别名（走词典别名扩展）——
+  # —— English / pinyin aliases (these go through the dictionary's alias expansion) ——
   - {id: en-01, q: deception, scope: tools, expect: [gui-dao]}
   - {id: en-02, q: momentum, scope: tools, expect: [shi]}
   - {id: en-03, q: win without fighting, scope: tools, expect: [bu-zhan-er-qu]}

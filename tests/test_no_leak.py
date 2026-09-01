@@ -1,6 +1,8 @@
-# 防泄漏（层①：公开的通用规则，本地与 CI 都跑；层②：主人机器上若有 ~/.kb/leak_terms.txt 就一并扫，词表本身永不提交）。
-# 机器仓库零私人数据：用户绝对路径 · 示例之外的 records/ proposals/ materials/ corpus/ self/ 与 .sqlite · 密钥 / cookie 模式 ·
-# 示例与文档之外的中文长文（>20 KB）· 示例之外的 BV 号 · plug.yaml 样例只许引用示例工具。
+# No-leak (layer 1: the public generic rules, run locally and in CI; layer 2: if the owner's machine has
+# ~/.kb/leak_terms.txt it is scanned too, and that word list is never committed).
+# Zero private data in the machine repo: user absolute paths · records/ proposals/ materials/ corpus/ self/ or
+# .sqlite outside the example · secret / cookie patterns · long Chinese text (>20 KB) outside the example and
+# docs · BV ids outside the example · a sample plug.yaml may only reference the example equipment.
 import re, subprocess
 from pathlib import Path
 import yaml
@@ -66,7 +68,8 @@ def test_plug_yaml_samples_only_reference_example_tool():
 
 
 def test_private_term_list_if_present():
-    """层②：主人机器上的私有词表（名字、邮箱、真实工具名、盘符路径……）。没有词表就跳过；词表本身永不提交。"""
+    """Layer 2: the owner's private word list (names, emails, real equipment names, drive paths…). Skipped when
+    the list is absent; the list itself is never committed."""
     p = Path.home() / ".kb" / "leak_terms.txt"
     if not p.exists():
         return

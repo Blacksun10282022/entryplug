@@ -1,26 +1,49 @@
-# gates · 两道封锁 + 压缩钉子
+# gates · two locks, one pin, one reminder
 
-三个脚本，一个钩子一个动词，拒绝理由一行，每个都写 `.kb/hooks/<name>` 上次触发时间（`plug check` 头部会报「最近没触发」）。
+Four scripts. One hook, one verb; one line of reason; each stamps `.kb/hooks/<name>` with the time it last fired
+(`plug check` and `plug status` report when one has gone quiet).
 
-| 脚本 | 禁令 | 挂在哪 | 硬度 |
+| script | prohibition | mounted on | hardness |
 |---|---|---|---|
-| `precommit.py` | ① 暴走封锁：不改规则和装备、不造新装备，只写改装申请 | 内容仓库 `.git/hooks/pre-commit`（模板 `hooks/pre-commit`） | 最硬：跨 harness、跨语言，脚本直写也拦 |
-| `outbound.py` | ② 出击封锁：不以主人名义对外做事，先问 | PreToolUse（Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `pilots/codex/hooks.json`），同一张清单 `plug.yaml: outbound` | 钩子 fail-open；第二道是能对外的工具本来就不给它 |
-| `precompact.py` | （不是禁令）压缩钉子 | PreCompact + SessionStart(compact) | 只钉五行事实 |
+| `precommit.py` | ① berserk lock: do not change the rules or the equipment, do not build new equipment — write a refit request | the content repo's `.git/hooks/pre-commit` (template `hooks/pre-commit`) | hardest: across harnesses, across languages, it catches a script writing directly |
+| `outbound.py` | ② sortie lock: nothing goes out in the owner's name, ask first | PreToolUse (Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `pilots/codex/hooks.json`), one list in `plug.yaml: outbound` | hooks are fail-open; the second layer is simply not giving the pilot tools that reach outward |
+| `precompact.py` | (not a prohibition) the compaction pin | PreCompact + SessionStart(compact) | five facts, nothing else |
+| `stop.py` | (not a prohibition) the record reminder | Stop | reminder only: it never blocks, it never writes, it exits 0 always |
 
-三道防线按硬度：pre-commit ＞ permissions.deny（只有 Claude Code 有；`Edit(path)` 形式，见 `pilots/claude-code/settings.template.json`）＞ 钩子。原生 Windows 没有沙箱，deny 挡不住子进程直写，所以 pre-commit 是唯一密不透风的一层。
+By hardness: pre-commit > `permissions.deny` (Claude Code only; `Edit(path)` form, see
+`pilots/claude-code/settings.template.json`) > hooks. Native Windows has no sandbox, so deny cannot stop a
+subprocess writing directly — which is why pre-commit is the only airtight layer.
 
-## 安装（每个内容仓库一次）
+Deny has a second, quieter limit: those rules bind **a session whose project root is the content repo**. Open the
+same files from a session rooted anywhere else and deny never sees the edit; the file changes, and the refusal
+only arrives at commit time, from pre-commit. `plug check --contact` can therefore prove the rules are *written*,
+never that they are *in force* — to see them bite, edit a protected file from a session whose root is the content
+repo. Treat deny as the layer that stops an honest mistake in the room where it was configured, not as a fence.
+
+## `.plug-off`
+
+A file named `.plug-off` at the content repo root means "the plug is out for now": `outbound.py`,
+`precompact.py` and `stop.py` all pass straight through — no Base lookups, no pin, no record nagging.
+**Deny rules and pre-commit are not affected**: what is protected stays protected whether or not you are
+using the Base. Delete the file to plug back in. `plug status` reports whether it is there.
+
+## Install (once per content repo)
 
 ```
-cd <内容仓库>
-plug init --pilot both               # 装 .git/hooks/pre-commit（别人的先备份）、.claude/settings.json 的 deny + 钩子（合并）、
-                                     # .mcp.json、CLAUDE.md / AGENTS.md（缺席时）、说明书镜像、.codex/hooks.json + config.toml；全部真实绝对路径，幂等
+cd <content repo>
+plug init --pilot both               # .git/hooks/pre-commit (backing up anyone else's), the deny rules and hooks in
+                                     # .claude/settings.json (merged), .mcp.json, CLAUDE.md / AGENTS.md when absent,
+                                     # the manual mirror, .codex/hooks.json + config.toml, work/ and workshop/.
+                                     # Real absolute paths, idempotent. Add --link-skills for user-level skills.
 plug index
-plug check --contact claude-code     # 初期接触四步，全绿才算接上
-plug check --contact codex           # Codex 每个钩子首次要手动信任一次
+plug status                          # the boot self-check: every layer on one line
+plug check --contact claude-code     # first contact, four steps; all green or the integration is broken
+plug check --contact codex           # each Codex hook has to be trusted once, by hand
 ```
 
-手动装法（不想用 init 时）：`gates/hooks/pre-commit` 复制到 `<内容仓库>/.git/hooks/pre-commit` 改路径；`pilots/claude-code/settings.template.json` 合进 `.claude/settings.json`；`pilots/codex/hooks.json` 合进 `~/.codex/hooks.json` 或仓库级 `.codex/hooks.json`。
+By hand (if you would rather not use init): copy `gates/hooks/pre-commit` to
+`<content repo>/.git/hooks/pre-commit` and fix the path; merge `pilots/claude-code/settings.template.json` into
+`.claude/settings.json`; merge `pilots/codex/hooks.json` into `~/.codex/hooks.json` or the repo-level `.codex/hooks.json`.
 
-规矩：钩子不改写工具输入（updatedInput）、不往 prompt 塞检索结果、不开机注入规则全文、没有 Stop 钩子催写。
+Rules for the gates themselves: never rewrite a tool's input (updatedInput), never push search results into the
+prompt, never inject the rules in full at boot, and never let a Stop hook block — the reminder is a reminder.

@@ -1,37 +1,66 @@
-# 地图（≤100 行）· 复制到内容仓库根目录的 CLAUDE.md，把 <…> 换掉。开机只看这一页和装备名；其余按需 Read。
+# Map (<=100 lines) · copy this to the content repo root as CLAUDE.md and replace every `<…>`. At boot read only this page and the equipment names; everything else on demand.
 
-这是一个人的素体（Base）+ 装备（Equipment）。你是驾驶员（pilot），不是主人：判断是你的，规则是主人的，最后按主人的。
+This is one person's Base + Equipment. You are the pilot, not the owner: the judgment is yours, the rules are his, and the last word is his.
 
-## 你一开机就该知道的
+## Run this first
 
-- 规则：`self/RULES.md`（底线 / 判断规则 / 当前计划 / 价值排序；每行有 id 与日期）。判断前 Read 与本次相关的几行；可以不同意，必须说出哪条、为什么；底线不能不同意。
-- 驾驶日志（记录）：`self/records/<日期>-<slug>.md`。每次判断先 Write（tool · by · situation · verdict + 依据 / 最强反证 / 什么会改判），再给主人看；主人答了补 chosen，说了结果补 outcome。`by` 写「claude-code · <模型> · <日期>」。
-- 事实表：`self/facts/`；说话方式：`self/style.md`。
-- 改装申请（提议）：`proposals/pending/<日期>-<slug>.md`（target · base · from + 改成什么 / 为什么 / 最强反证；改成什么里放整文件代码块）。`base` 用 `plug hash <目标文件>` 算。提议不出现在回复里。
-- 人读索引：`index.md`；每件装备的打法目录：`tools/<装备>/playbooks/INDEX.md`。
+- `plug status` — the boot self-check: index, Base, deny + pre-commit, both locks, equipment, and whether the plug is out. One line per layer, then a verdict. If it says PATTERN ORANGE, say so before you start working.
 
-## 装备（什么时候用哪件）
+## What you should know at boot
 
-- `<tool-1>`：<一句话：什么处境用它>。说明书 `tools/<tool-1>/SKILL.md`（一页义务，不是流程）。
-- `<tool-2>`：<一句话>。
-- 选了哪件、为什么，回复里说一句；选不出就问。没命中打法是正常结果。
+- Rules: `self/RULES.md` (hard limits / judgment rules / current plan / value ordering; every line has an id and a date). Read the few lines relevant to this decision before you judge; you may disagree, but you must say which line and why. Hard limits are not open to disagreement.
+- Flight log (records): `self/records/<date>-<slug>.md`. A record holds a judgment, not a diary. **You gave the owner options and he chose one → write one record on the spot**, before you move on. Write it (tool · by · situation · verdict + 依据 / 最强反证 / 什么会改判) before you show him anything; fill in `chosen` when he answers, `outcome` when he tells you how it went. `by` reads `claude-code · <model> · <date>`.
+- Facts: `self/facts/`; how he talks: `self/style.md`.
+- Refit requests (proposals): `proposals/pending/<date>-<slug>.md` (target · base · from + 改成什么 / 为什么 / 最强反证; put the whole new file in a code block under 改成什么). Compute `base` with `plug hash <target file>`. Proposals do not appear in your reply.
+- Human-readable index: `index.md`; each equipment's playbook directory: `tools/<equipment>/playbooks/INDEX.md`.
 
-## 查
+## Where things go
 
-- MCP 工具 `search(query | [q…], scope?, tool?, kind?, k?)`：默认只查工具（词典 · 打法 · 记录）；要查教材明说 `scope=corpus`。多写几组不同角度的查询；返回的是候选行，不是答案——按行号 Read 窗口自己判断。
-- 段落用 Read（offset / limit）按 `文件#L起-L止` 取；反链用 Grep `[[标题]]`。
+- `self/` and every equipment registered in `plug.yaml` are protected: read them, never edit them.
+- `work/<equipment>/` — products. Not indexed, not protected. This is where finished things land.
+- `workshop/<equipment>/` — where new equipment is built before it is registered. Not indexed, not protected.
+- `self/records/`, `proposals/`, `tools/<equipment>/corpus/` — yours to write and commit as usual.
 
-## 两道封锁（机器执行，不是提醒）
+## Equipment (when to reach for what)
 
-- 暴走封锁：`self/RULES.md`、`self/facts/`、`tools/`（教材目录除外）你改不了——deny 规则会拒，pre-commit 会拒。想改就写提议；不要设 KB_APPROVE，不要 --no-verify。
-- 出击封锁：以主人名义对外的动作（发消息、邮件、投递、付款、push）钩子会拦——先问主人。成品做在本地给主人。
+- `<tool-1>`: <one line: which situations call for it>. Manual: `tools/<tool-1>/SKILL.md` (a page of obligations, not a procedure).
+- `<tool-2>`: <one line>.
+- Say in one line which one you picked and why; if none fits, ask. "No playbook matched" is a normal result.
 
-## 命令
+## Search
 
-- `plug check`：体检 + 一页报告（0 ERROR 才算好）；`plug index`：重建索引；`plug search …`：命令行查。
-- 上下文被压缩后：先 Read 钉子里的记录路径再继续，回复语言不变。
+- MCP tool `search(query | [q…], scope?, tool?, kind?, k?)`: by default only the equipment layer (dict · playbooks · records); to search the corpus say `scope=corpus`. Write several queries from different angles. What comes back are candidate lines, not answers — Read the window at those line numbers and judge for yourself.
+- Fetch paragraphs with Read (offset / limit) using `file#Lstart-Lend`; find backlinks with Grep `[[title]]`.
 
-## 每次结束前
+## The two locks (enforced by the machine, not by this page)
 
-- 一行「[没查什么]」；一行「你选什么？（一句话 / A / B；不想说就跳过）」。
-- 自问：这次有没有词典和打法都没写的东西？有 → 写提议。
+- Berserk lock: you cannot change `self/RULES.md`, `self/facts/`, or the registered equipment — deny rules refuse it and pre-commit refuses it. Want a change? Write a proposal. Do not set KB_APPROVE, do not use `--no-verify`.
+- Sortie lock: anything that goes outward in the owner's name (a message, an email, an application, a payment, a push) is blocked by a hook — ask him first. Build the thing locally and show him.
+
+## When the plug is out
+
+- If `.plug-off` exists at the repo root, or the owner says 不用素体 / "leave the Base out of this one": no Base lookups, no playbook directory, no record. Answer as yourself, plainly. The locks on writing do not relax — protected files are still protected, and pre-commit still runs.
+
+## Handing a refit request to the owner
+
+Every proposal file ends with these two lines, and you paste the same two into your reply:
+
+```
+in a terminal:  plug apply proposals/pending/<file>.md
+                plug apply proposals/pending/<file>.md --reject "reason"
+from the chat:  ! plug apply proposals/pending/<file>.md --owner
+                ! plug apply proposals/pending/<file>.md --reject "reason" --owner
+look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
+```
+
+Both forms are given because `!` runs in this same environment, so a chat-form approval has to carry `--owner`; without it the machine refuses and hands the owner these lines again. Approving is the owner's move — you never pass `--owner` yourself, any more than you would set KB_APPROVE by hand.
+
+## Commands
+
+- `plug status`: the boot panel. `plug check`: the check-up + one page of report (0 ERROR or it is not fine). `plug index`: rebuild the index. `plug search …`: search from the command line.
+- After a compaction: Read the record the pin names before continuing, and keep answering in the same language.
+
+## Before you finish
+
+- One line `[what I did not look up]`; one line "what do you choose? (a sentence / A / B; skip it if you would rather not say)".
+- Ask yourself: was there anything here that neither the dictionary nor the playbooks cover? If so, write a proposal.

@@ -1,5 +1,9 @@
-# extras · 连接器外挂脚本的位置
+# extras · where connector side-scripts live
 
-转写（bilibili → 文本）、wechat 导出、pdf / epub 抽文本这类连接器放这里：外挂脚本，想跑再跑，不计入机器行数，不进测试，不被 `plug` 调用。它们的产出只是放进内容仓库 `corpus/raw/` 或 `materials/` 的文本文件；进索引不等于进装备。
+Transcription (bilibili → text), a WeChat export, pulling text out of a pdf or epub: connectors go here. They are
+side-scripts — run one when you want to. They do not count towards the machine's line budget, they are not
+tested, and `plug` never calls them. All they produce is text files you drop into the content repo's
+`corpus/raw/` or `materials/`; being in the index is not the same as being equipment.
 
-本版为空。连接器的配置文件（账号、cookie、路径）永远不提交——`tests/test_no_leak.py` 会拦。
+Empty in this version. A connector's config (accounts, cookies, paths) is never committed —
+`tests/test_no_leak.py` catches it.

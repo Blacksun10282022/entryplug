@@ -21,6 +21,19 @@
         "hooks": [
           { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/../../gates/precompact.py\" --emit", "timeout": 30 }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          { "type": "command", "command": "python -m entryplug.cli status --emit", "timeout": 30 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/../../gates/stop.py\"", "timeout": 20 }
+        ]
       }
     ]
   }

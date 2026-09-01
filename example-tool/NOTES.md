@@ -1,24 +1,43 @@
-# 示例装备《孙子兵法》· 说明
+# Example equipment · Sunzi's Art of War · notes
 
-这是插入栓自带的**合成示例**内容仓库：一件装备（`tools/sunzi/`）+ 一个虚构主人的素体（`self/`）+ 几条改装申请。机器的测试与验收剧本只跑它。
+This is the **synthetic** example content repo that ships with the entry plug: one piece of equipment
+(`tools/sunzi/`), a fictional owner's Base (`self/`), a few refit requests, and the two free zones
+(`work/`, `workshop/`). The machine's tests and acceptance script only ever run against this.
 
-## 来源与许可
+The corpus, the dictionary entries and the playbooks are in Chinese: they are data, and the machine is meant to
+work in whatever language the content is written in. Everything that is the machine talking — the manual,
+this file, the CLI — is in English.
 
-- 教材 `tools/sunzi/corpus/raw/sunzi-01..13-*.md`：《孙子兵法》十三篇，**公有领域**。文字取自维基文库《孫子兵法》页面的 zh-hans（简体）变体，2026-08-29 通过 MediaWiki API 取得，按 `== 篇名 ==` 拆成十三个文件，去掉了页面附录「答话」与变体注释。维基文库该页标注的底本是通行本（十一家注 / 武经七书系统的通行文字）；与你手头的版本若有一两字之差，以本仓库文件为准——锚句核对只认这里的文本。
-- 其余一切（说明书、打法、词典条目与观察行、记录、资料、规则、提议、讲座样例）由机器作者新写，**CC0 1.0**（见 `LICENSE-CC0`）。主人、公司、价格、对手全是虚构。
-- 词典观察行的 `^pNNNN` 锚点与 `(src: doc#seq "锚句")` 全部指向上面的教材文件；`#seq` 是纯文本段里的段落序号（1 起）。
+## Sources and licence
 
-## 文件形状对照
+- Corpus `tools/sunzi/corpus/raw/sunzi-01..13-*.md`: the thirteen chapters of Sunzi's Art of War, **public domain**.
+  The text is the zh-hans variant of the Wikisource 《孫子兵法》 page, fetched through the MediaWiki API on
+  2026-08-29, split by `== chapter ==` into thirteen files, with the page's appendix and variant notes removed.
+  Wikisource marks that page as following the common received text (the 十一家注 / 武经七书 line). If your copy
+  differs by a character or two, this repo's files win — anchor-sentence checking only knows this text.
+- Everything else (the manual, playbooks, dictionary entries and their observation lines, records, materials,
+  rules, proposals, the lecture sample) was written for this repo, **CC0 1.0** (see `LICENSE-CC0`). The owner,
+  the company, the prices and the counterparties are all invented.
+- The `^pNNNN` anchors and `(src: doc#seq "sentence")` in the dictionary all point at the corpus files above;
+  `#seq` is the paragraph number (1-based) inside the plain-text section.
 
-- `tools/sunzi/corpus/raw/*.md`：教材，头部 `Title / ID / Kind / Date / Source` + `==== 纯文本 ====`。
-- `tools/sunzi/corpus/raw/talk-2026-08-01-shi.txt`：讲座转写样例（`Title / BVID / Date` + 纯文本段 + 带时间戳段；机器只索引纯文本段）。
-- `tools/sunzi/corpus/clean/talk-2026-08-01-shi.md`：同一讲的清洗稿（6 行头 + `====` + `[m:ss]` 段落）。同一 id 有清洗稿时只索引清洗稿。
-- `self/records/`：驾驶日志（记录）；`proposals/pending/`：改装申请（提议）。
+## Which file has which shape
 
-## 故意留下的 WARNING（示范体检报告，不是错误）
+- `tools/sunzi/corpus/raw/*.md`: corpus, header `Title / ID / Kind / Date / Source` + `==== 纯文本 ====`.
+- `tools/sunzi/corpus/raw/talk-2026-08-01-shi.txt`: a lecture transcript sample (`Title / BVID / Date` + a plain
+  text section + a timestamped section; only the plain text section is indexed).
+- `tools/sunzi/corpus/clean/talk-2026-08-01-shi.md`: the cleaned version of the same talk (6-line header +
+  `====` + `[m:ss]` paragraphs). When one doc id has a cleaned version, only that one is indexed.
+- `self/records/`: the flight log (records); `proposals/pending/`: refit requests, each ending with the owner's
+  two copy-paste lines.
+- `work/`, `workshop/`: the free zones — not indexed, not protected.
 
-- `tools/sunzi/materials/2026-07-10-market-price.md`：kind=price，保质期 30 天，已过期。
-- `self/records/2026-07-20-supplier-delay.md`：超过 30 天没填 outcome。
-- `self/records/2026-08-27-choose-venue.md`：主人未答（chosen 为空），同步率里计「未答」。
+## WARNINGs left in on purpose (they demonstrate the report; they are not mistakes)
 
-`plug check` 在这里应当是 **0 ERROR**；每种 ERROR 由 `tests/test_check.py` 在临时副本里故意弄坏一次。
+- `tools/sunzi/materials/2026-07-10-market-price.md`: kind=price, 30-day shelf life, expired.
+- `self/records/2026-07-20-supplier-delay.md`: more than 30 days without an outcome.
+- `self/records/2026-08-27-choose-venue.md`: the owner has not answered (chosen is empty), counted as
+  "unanswered" on the numbers page.
+
+`plug check` here should report **0 ERROR**; each kind of ERROR is broken on purpose once, in a temporary copy,
+by `tests/test_check.py`.

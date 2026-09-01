@@ -1,15 +1,36 @@
-# pilots/codex · Codex 零代码接入
+# pilots/codex · wiring up Codex, no code required
 
-两个驾驶员平权：一切状态都是内容仓库里的文件，切换 = 换个人读同一个文件夹。
+The two pilots are equals: all state is files in the content repo, so switching pilots is one more person reading
+the same folder.
 
-最短路径：在内容仓库里跑 `plug init --pilot codex`——写 AGENTS.md（缺席时）、镜像说明书 + `agents/openai.yaml`、仓库级 `.codex/hooks.json` 与 `.codex/config.toml`（`[mcp_servers.entryplug]`）、pre-commit 钩子；若你的 Codex 只读 `~/.codex/`，把这两份合过去。手动装法如下：
+Shortest path: run `plug init --pilot codex` inside the content repo — it writes AGENTS.md (only when absent),
+mirrors the manuals plus `agents/openai.yaml`, writes the repo-level `.codex/hooks.json` and `.codex/config.toml`
+(`[mcp_servers.entryplug]`), and installs the pre-commit hook. If your Codex only reads `~/.codex/`, merge those
+two files across. By hand:
 
-1. `AGENTS.md` → 复制为 `<内容仓库>/AGENTS.md`，填 `<tool-…>`（和 CLAUDE.md 是同一份地图）。
-2. 说明书：`plug index` 已把每件装备的 `SKILL.md` 镜像到 `<内容仓库>/.agents/skills/<装备>/SKILL.md`，并放好 `agents/openai.yaml`（`allow_implicit_invocation: true`，Codex 的隐式调用开关不在 frontmatter，见 `agents-openai.yaml`）。
-   想只留一份副本，也可以用目录链接代替镜像（Windows）：`mklink /J .agents\skills .claude\skills`，然后在 plug.yaml 里删掉 codex 的 skills 行。
-3. MCP：在 Codex 的 MCP 配置里加一条 `entryplug`，命令 `plug mcp`（cwd = 内容仓库）。
-4. 出击封锁：`hooks.json` → 合进 `~/.codex/hooks.json`（或仓库级），改占位路径；每个钩子首次要手动信任。
-5. 暴走封锁：`gates/hooks/pre-commit` → `<内容仓库>/.git/hooks/pre-commit`。**Codex 没有 permissions.deny，禁令①在这边只有 pre-commit 一道**——切换驾驶员时驾驶员必须说出这个差别。
-6. `plug check --contact codex` 四步全绿才算接上。
+1. `AGENTS.md` → copy to `<content-repo>/AGENTS.md` and fill in the `<tool-…>` slots (same map as CLAUDE.md).
+   It tells the pilot to run `plug status` first thing every session.
+2. Manuals: `plug index` has already mirrored every `SKILL.md` to
+   `<content-repo>/.agents/skills/<equipment>/SKILL.md` with an `agents/openai.yaml` beside it
+   (`allow_implicit_invocation: true` — Codex's implicit-invocation switch is not in the frontmatter, see
+   `agents-openai.yaml`; equipment marked `disable-model-invocation: true` gets `false` instead).
+   To keep a single copy you can use a directory junction instead of the mirror (Windows):
+   `mklink /J .agents\skills .claude\skills`, then drop the codex skills line from plug.yaml.
+3. MCP: add an `entryplug` entry to Codex's MCP config, command `plug mcp` (cwd = the content repo).
+4. Sortie lock: merge `hooks.json` into `~/.codex/hooks.json` (or the repo-level file) and fix the placeholder
+   paths. Each hook has to be trusted once, by hand. The same file also carries the compaction pin, the
+   SessionStart panel and the Stop-hook record reminder.
+5. Berserk lock: `gates/hooks/pre-commit` → `<content-repo>/.git/hooks/pre-commit`.
+   **Codex has no permissions.deny, so prohibition ① has only this one layer here** — the pilot must say so out
+   loud when the owner switches pilots.
+6. `plug check --contact codex`, four steps, all green.
 
-记录的 `by` 字段写「codex · <模型> · <日期>」，同一个处境两个驾驶员的判断可以对照。
+## User-level equipment
+
+`plug init --pilot codex --link-skills` also copies every `SKILL.md` into the user-level skills directory
+(`~/.agents/skills/<equipment>/` by default, overridable with `pilots.codex.user_skills` in plug.yaml), with the
+content repo's absolute path stamped in so the equipment still knows where products go: `<root>/work/<equipment>/`.
+It is a manual trigger, and there is no user-level MCP registration — outside the content repo you get the
+manual, not the Base.
+
+A record's `by` field reads `codex · <model> · <date>`, so the same situation judged by two pilots can be compared.

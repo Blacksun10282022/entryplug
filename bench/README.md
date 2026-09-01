@@ -1,36 +1,43 @@
-# bench · 跑分器与基准
+# bench · the benchmark runner and its inputs
 
-两层并列，永远没有总分（设计 §6.7 / §7.3）。
+Two layers side by side, and never a total score (design §6.7 / §7.3).
 
-## 公开小基准（`bench/public/`）
+## The public mini benchmark (`bench/public/`)
 
-在示例装备《孙子兵法》上跑，案例公开，任何人得同一张逐案表。第一版只有一个机械指标：金标 recall@10。
+Run against the Sunzi example equipment; the cases are public, so anyone gets the same per-case table. The first
+version has exactly one mechanical metric: gold-set recall@10.
 
 ```
 plug --root example-tool index
 plug --root example-tool eval bench/public/goldset-sunzi.yaml
 ```
 
-退出码 1 = 中文查询 recall 为零（ERROR 级验收，§6.1）；中文明显低于英文只是 WARNING。
+Exit code 1 = zero recall on Chinese queries (ERROR-grade acceptance, §6.1); Chinese far below English is only a
+WARNING.
 
-## 金标 yaml 格式
+## Gold set yaml format
 
 ```yaml
 version: 1
-scope: corpus                      # 缺省查哪一层：tools / corpus / all
+scope: corpus                      # default layer to search: tools / corpus / all
 cases:
-  - id: zh-01                      # 可省，缺省用查询原文
-    q: 诡道                        # 一条查询，或一组不同角度的查询列表
-    expect: [sunzi-01-shiji]       # 期望进前 k 的 doc id / 条目 id / 块 id（任一命中即算）
-    lang: zh                       # 可省：查询含中文即 zh，否则 en
-    scope: tools                   # 可省：覆盖缺省 scope
-    per_doc: 1                     # 可省：每讲座限额（recall 按文档算，默认 1）
+  - id: zh-01                      # optional; defaults to the query text
+    q: 诡道                        # one query, or a list of queries taking different angles
+    expect: [sunzi-01-shiji]       # doc id / entry id / chunk id expected in the top k (any one counts)
+    lang: zh                       # optional: a query containing Chinese is zh, otherwise en
+    scope: tools                   # optional: override the default scope
+    per_doc: 1                     # optional: per-document cap (recall is per document; default 1)
 ```
 
-## 私有真实基准（不公开案例）
+## The private, real benchmark (cases never published)
 
-主人的真实处境基准永远不进这个仓库：跑之前把案例文件的 sha256 + 协议版本 + 模型写进 `registry.md` 并提交，结果只引用那条登记，只发 n、比例与区间、按装备分、模型 / harness / 日期戳。逐案、处境原文、答案片段不发；从真实内容建的索引永远 gitignore。
+The owner's real situations never enter this repo. Before a run, write the case file's sha256 + the protocol
+version + the model into `registry.md` and commit that; results may only cite that entry, and may only report n,
+the proportion, the interval, split by equipment, stamped with model / harness / date. Per-case results, the
+situation text and answer fragments are never published, and an index built from real content is always gitignored.
 
-## 不许说的话
+## Things not to say
 
-「省 95% token」「10x」「比 X 好」、任何由 LLM 裁判得出的「判断质量」、把 n=1 说成普遍结论。区间下限没过 50% 不得写「比裸模型好」。
+"Saves 95% of your tokens", "10x", "better than X"; any "judgment quality" number that came from an LLM judge;
+an n=1 result stated as a general conclusion. If the lower bound of the interval has not cleared 50%, you do not
+get to write "better than the bare model".

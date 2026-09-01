@@ -1,8 +1,9 @@
 {
   "_readme": [
-    "Codex 钩子配置（合进 ~/.codex/hooks.json 或仓库级配置）。同一张出击封锁清单（plug.yaml: outbound）、同一个脚本 gates/outbound.py。",
-    "Codex 的钩子语义与 Claude Code 相同：PreToolUse exit 2 阻断、fail-open、默认 600 s、每个钩子要手动信任一次；字段名以你装的 Codex 版本文档为准（写作时 2026-08，harness 戳见 STATUS.md）。",
-    "占位 //c/<entryplug-repo> 换成你克隆 entryplug 的位置。"
+    "Codex hook config (merge into ~/.codex/hooks.json, or the repo-level file). Same sortie-lock list (plug.yaml: outbound), same script gates/outbound.py.",
+    "Codex hook semantics match Claude Code's: PreToolUse exit 2 blocks, hooks are fail-open, the default timeout is 600 s, and each hook has to be trusted once by hand. Field names follow the Codex version you installed (written 2026-08; the harness stamp is in STATUS.md).",
+    "The Stop hook is the record reminder: it never blocks and always exits 0.",
+    "Replace //c/<entryplug-repo> with wherever you cloned entryplug, and //c/<content-repo> with the content repo."
   ],
   "hooks": {
     "PreToolUse": [
@@ -18,7 +19,14 @@
       {
         "matcher": "compact",
         "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\" --emit", "timeout": 30 }]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [{ "type": "command", "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 }]
       }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/stop.py\"", "timeout": 20 }] }
     ]
   }
 }

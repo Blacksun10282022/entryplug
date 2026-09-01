@@ -1,58 +1,153 @@
-# entryplug · 插入栓
+# entryplug · Entry Plug
 
-一个人把自己的判断做成文件、交给 agent 用时，中间那台机器：三种文件形状、一个只读查询接口、两条机器执行的禁令、一次体检。它不判断、不编排、不自学。附一件《孙子兵法》示例装备，五分钟跑完验收剧本，和一套谁都能复现的小基准。它是我自己在用的东西，不是给所有人准备的通用件。
+The machine that sits between one person's written judgment and the agent that uses it: three file shapes, one
+read-only search interface, two machine-enforced prohibitions, one check-up. It does not judge, does not
+orchestrate, does not learn on its own. A Sunzi example equipment ships with it, so the acceptance script runs
+in five minutes, along with a small benchmark anyone can reproduce. This is something I use myself; it is not a
+general-purpose product.
 
-*Entryplug is the plug any pilot (Claude Code / Codex) inserts into one person's Base (rules, flight log, facts) to fight with that person's Equipment (tools). The owner never pilots; the pilot never edits the Base.* 架构模式叫 **素体—装备 / Base & Equipment**。
+*Entryplug is the plug any pilot (Claude Code / Codex) inserts into one person's Base (rules, flight log, facts)
+to fight with that person's Equipment (tools). The owner never pilots; the pilot never edits the Base.*
+The architectural pattern is called **Base & Equipment**.
 
-## 它做什么（全部在机器里，内容永远不在）
+## What it does (all of it in the machine; the content is never here)
 
-| 动词 | 做什么 |
+| verb | what it does |
 |---|---|
-| `plug index` | 走内容仓库 → 形状校验 → 分块 → jieba 词 + 字二元组 → **一张 FTS5 表**；按文件哈希增量；生成人读的 `index.md`、每件装备的打法目录 `playbooks/INDEX.md`；把说明书镜像到驾驶员的 skills 目录 |
-| `plug search` / MCP `search` | 唯一的查询接口，只读：收一条或多组查询 → 别名扩展 → 全文 → round-robin 合并 → 按讲座分组 → 紧凑行（id · 出处 · 文件#L起-L止 · kind · 摘录）。**不重排**：读窗口、打分是驾驶员的事 |
-| `plug check` | 体检：ERROR / WARNING 逐项带时间戳，头部自检（形状版本 · 索引新旧 · 钩子上次触发 · 挂了哪些装备），跑装备自带的 `checks/`，30 天没批的改装申请移到 rejected/，一页报告 + 同步率（数字页）。永远没有总分。`--contact claude-code\|codex` = 初期接触四步 |
-| `plug apply` | 批一条改装申请：核 base 短哈希 → add / replace / retire → 体检 0 ERROR → git 提交（trailer 记提议 sha）。base 不匹配整体拒绝，绝不静默覆盖 |
-| `plug eval` | 金标 recall@10；中文查询 recall 为零 = ERROR |
-| `plug init --pilot claude-code\|codex\|both` | 把闸门和驾驶员薄壳装进一个内容仓库：pre-commit 钩子、`.claude/settings.json` 的 deny 规则与钩子（合并，不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md 地图（只在缺席时）、说明书镜像、`.codex/hooks.json` 与 `.codex/config.toml`——全部写真实绝对路径；幂等，打印每个文件的动作 |
+| `plug index` | walk the content repo → shape validation → chunking → jieba words + CJK bigrams → **one FTS5 table**; incremental by file hash; writes the human-readable `index.md` and each equipment's playbook directory `playbooks/INDEX.md`; mirrors the manuals into the pilots' skills directories |
+| `plug search` / MCP `search` | the only query interface, read-only: one or more queries → alias expansion → full text → round-robin merge → grouped by document → compact lines (id · source · file#Lstart-Lend · kind · excerpt). **No reranking**: reading the window and weighing it is the pilot's job |
+| `plug status` | the boot self-check. One line per layer — index, Base, deny + pre-commit, berserk lock, sortie lock, equipment bay, `.plug-off` — then a sync rate and a verdict. Exits nonzero only when the index layer itself is unusable |
+| `plug check` | the check-up: ERROR / WARNING one line at a time with the time each was verified, the header self-check (shape version · index freshness · when each hook last fired · mounted equipment), each equipment's own `checks/`, refit requests unapproved for 30 days moved to rejected/, one page of report + the sync rate. Never a total score. `--contact claude-code\|codex` = the four-step first-contact smoke test |
+| `plug apply` | approve one refit request: verify the base short hash → add / replace / retire → check with 0 ERROR → git commit (the proposal sha in a trailer). A base mismatch is refused outright, never silently overwritten. **Owner only**: run inside an agent environment it refuses and tells the owner how to run it himself |
+| `plug eval` | gold-set recall@10; zero recall on Chinese queries is an ERROR |
+| `plug init --pilot claude-code\|codex\|both` | install the gates and the pilot shells into a content repo: the pre-commit hook, `.claude/settings.json`'s deny rules and hooks (merged, never overwritten), `.mcp.json`, the CLAUDE.md / AGENTS.md map (only when absent), the manual mirror, `.codex/hooks.json` and `.codex/config.toml`, the `work/` and `workshop/` zones — all with real absolute paths; idempotent, and it prints what it did to every file. `--link-skills` also installs the manuals user-level |
 
-两条禁令由 `gates/` 执行，不靠提示词：**暴走封锁**（不改规则和装备、不造新装备，只写改装申请）= git pre-commit + Claude Code deny 规则；**出击封锁**（不以主人名义对外做事，先问）= PreToolUse 钩子，Claude Code / Codex 用同一张清单。外加一个压缩钉子。
+Two prohibitions are enforced by `gates/`, not by prompting: the **berserk lock** (do not change the rules or the
+equipment, do not build new equipment — write a refit request) = git pre-commit + Claude Code deny rules. Know
+what the deny half is worth: the rules live in `<content-repo>/.claude/settings.json` and bind a session whose
+**project root is that repo**. An agent working from somewhere else — another project, a machine repo, a scratch
+directory — edits those files with nothing in its way, and only pre-commit stops the result from landing. That is
+why pre-commit is the airtight layer and deny is the polite one. The
+**sortie lock** (nothing goes out in the owner's name — ask first) = a PreToolUse hook, one list shared by Claude
+Code and Codex. Plus a compaction pin and a Stop-hook record reminder, both reminder-level.
 
-## 五分钟
+## Five minutes
 
 ```
 git clone <this repo> entryplug && pip install -e ./entryplug
 cd entryplug
 plug --root example-tool index
+plug --root example-tool status
 plug --root example-tool search 诡道
 plug --root example-tool check
 plug --root example-tool eval bench/public/goldset-sunzi.yaml
-python -m pytest            # 每个动词、每道闸门、每种 ERROR 各一组
-python tests/acceptance.py  # 验收剧本 C0–C4，机器项 PASS/FAIL，手动项 MANUAL
+python -m pytest            # one group per verb, per gate, per kind of ERROR
+python tests/acceptance.py  # the acceptance script C0–C4: machine items PASS/FAIL, human items MANUAL
 ```
 
-自己的内容仓库照 `example-tool/` 的样子建（`plug.yaml` 是内容仓库里唯一允许出现路径的地方），然后在里面跑 `plug init --pilot both` 装闸门和驾驶员薄壳，再 `plug index` 与 `plug check --contact claude-code`（或 `codex`）四步全绿。接入细节见 `pilots/claude-code/` 与 `pilots/codex/`，闸门见 `gates/README.md`，形状见 `docs/SHAPES.md`。
+Build your own content repo the way `example-tool/` is built (`plug.yaml` is the only place a path may appear),
+then run `plug init --pilot both` inside it to install the gates and the pilot shells, then `plug index`,
+`plug status`, and `plug check --contact claude-code` (or `codex`) with all four steps green. Integration details
+are in `pilots/claude-code/` and `pilots/codex/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`,
+and every call made along the way — including the whole W2 round, D36–D44 — in `docs/DECISIONS.md`.
 
-`plug search` 默认只查词典 · 打法 · 记录；查教材要 `--scope corpus`（MCP 同样是 `scope=corpus`）。没有命中时尾行会说明范围与索引时间；没有索引会直接报「先 plug index」。
+`plug search` covers the dictionary, the playbooks and the records by default; the corpus needs `--scope corpus`
+(`scope=corpus` over MCP). With no hits the tail line says which scope was searched and when the index was built;
+with no index it says so and exits 1.
 
-## 仓库
+## The owner's two lines
+
+A pilot may write a refit request; only the owner may approve one. Every proposal file ends with the same block
+the pilot pastes into the reply:
 
 ```
-entryplug/   cli · config · shapes · index · search · mcp · check · numbers · contact · apply · eval（一个文件一个动词，每文件 ≤250 行，没有类和框架）
-gates/       precommit · outbound · precompact + 钩子模板
-pilots/      claude-code/（插件壳 · 地图 · deny 模板）· codex/（AGENTS.md · 钩子 · 目录链接说明）
-example-tool/ 《孙子兵法》示例内容仓库（教材公有领域，其余 CC0）
-tests/       每个动词一组、每道闸门一组、每种 ERROR 故意坏一次、防泄漏、验收剧本
-bench/       跑分器输入格式 · 公开小金标 · 私有基准登记哈希
-docs/        PLAN · DECISIONS · SHAPES
-extras/      连接器外挂脚本的位置（不计入行数、不进测试）
+in a terminal:  plug apply proposals/pending/<file>.md
+                plug apply proposals/pending/<file>.md --reject "reason"
+from the chat:  ! plug apply proposals/pending/<file>.md --owner
+                ! plug apply proposals/pending/<file>.md --reject "reason" --owner
+look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
 ```
 
-依赖：Python 3.12 · stdlib（sqlite3 + FTS5）· jieba · PyYAML · git。Windows 原生可用，无编译依赖。向量检索是可选模块 `pip install entryplug[dense]`（本版只有接口桩）。
+Why two forms: inside Claude Code / Codex the `!` prefix runs the command in the owner's own session, but that
+session is the *same environment the pilot runs in*, so `plug apply` cannot tell an owner keystroke from an agent
+tool call and refuses on the agent markers. The chat form therefore carries `--owner` (`PLUG_OWNER=1` works too);
+in a real terminal no marker is set and no flag is needed. `--dry-run` is open to anyone, anywhere. A pilot
+passing `--owner` is exactly the broken promise that setting `KB_APPROVE` by hand would be — and, like that one,
+the real backstop is pre-commit. The wording lives in one function, `apply.owner_lines()`.
 
-## 不做什么
+## Two cards
 
-不训模型、不让 LLM 给判断打分、没有总分；不写 agent 运行时、规则引擎、匹配器；入库不做 LLM 抽取；没有定时任务、没有无人值守的 LLM 任务；不做插件市场、多用户、云同步、web 查看器。
+### In the content repo, without the plug
 
-## 许可与立场
+Some days the Base is beside the point and you want the plain model. Either put a file called **`.plug-off`** at
+the repo root, or just say so ("不用素体" / "leave the Base out of this one").
 
-机器 MIT，示例内容 CC0。**开源，不开放贡献**（SQLite 的说法）：接受带复现步骤的 bug 报告，不接功能请求，欢迎 fork，没有路线图。只在自己的验收剧本全过时打 tag；最近一次验证见 `STATUS.md`。
+- What turns off: the sortie lock, the compaction pin and the Stop-hook record reminder all pass straight
+  through — no Base lookups, no playbook directory, no record nagging.
+- What does **not** turn off: the deny rules and pre-commit. Protected files stay protected whether or not the
+  plug is in. Nothing about `.plug-off` lets anyone edit `self/RULES.md`.
+- `plug status` reports whether it is there, so you never wonder which mode you are in. Delete the file to plug
+  back in.
+
+### Outside the content repo, with the plug
+
+You want one piece of equipment while working somewhere else entirely — another project, a scratch directory.
+
+```
+plug --root <content-repo> init --pilot claude-code --link-skills
+```
+
+That copies every `tools/*/SKILL.md` into the user-level skills directory (`~/.claude/skills/<equipment>/`,
+`~/.agents/skills/<equipment>/` for Codex; override with `pilots.<name>.user_skills` in plug.yaml), stamping in
+the content repo's absolute path. It is a manual trigger and it registers no user-level MCP server: outside the
+content repo you get the manual, not the Base.
+
+- Products default to `<content-repo>/work/<equipment>/`. If a copy is wanted where you are working, write the
+  copy and note the master path in it.
+- The Base is not loaded out here, and the manual says so: the equipment states that instead of inventing the
+  owner's rules.
+- Equipment you would rather the model never reached for on its own gets `disable-model-invocation: true` in its
+  SKILL.md frontmatter; that rides along into the user-level copy and into Codex's `openai.yaml`.
+
+## Boot panel as a SessionStart hook
+
+`plug init` wires this up; by hand it is:
+
+```json
+{ "hooks": { "SessionStart": [ { "matcher": "startup|resume|clear",
+  "hooks": [ { "type": "command",
+    "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
+```
+
+`--emit` wraps the panel as `additionalContext`. It is a panel of measured facts — the index is really queried
+and timed — never the rules and never a search result. `AGENTS.md` tells Codex-style pilots to run `plug status`
+first thing instead.
+
+## Layout
+
+```
+entryplug/    cli · config · shapes · index · search · mcp · check · numbers · report · contact · status · apply · eval · init
+              (one verb per file, <=250 lines each, no classes and no frameworks)
+gates/        precommit · outbound · precompact · stop + the hook template
+pilots/       claude-code/ (plugin shell · map · deny template) · codex/ (AGENTS.md · hooks · junction notes)
+example-tool/ the Sunzi example content repo (corpus public domain, everything else CC0)
+tests/        one group per verb, per gate, per kind of ERROR, plus no-leak and the acceptance script
+bench/        the benchmark input format · a public mini gold set · the private benchmark registry
+docs/         DECISIONS · SHAPES
+extras/       where connector side-scripts live (not counted, not tested)
+```
+
+Dependencies: Python 3.12 · stdlib (sqlite3 + FTS5) · jieba · PyYAML · git. Works on native Windows, nothing to
+compile. Vector retrieval is an optional module, `pip install entryplug[dense]` (an interface stub in this version).
+
+## What it does not do
+
+No model training, no LLM scoring of judgments, no total score; no agent runtime, rule engine or matcher; no LLM
+extraction on the way in; no scheduled jobs and no unattended LLM tasks; no plugin marketplace, no multi-user, no
+cloud sync, no web viewer.
+
+## Licence and stance
+
+The machine is MIT, the example content CC0. **Open source, not open contribution** (SQLite's phrasing): bug
+reports with reproduction steps are welcome, feature requests are not, forks are fine, there is no roadmap.
+Tags are cut only when the acceptance script passes in full; the last verification is in `STATUS.md`.

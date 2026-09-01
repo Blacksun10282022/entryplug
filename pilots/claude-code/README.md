@@ -1,19 +1,36 @@
-# pilots/claude-code · Claude Code 接入
+# pilots/claude-code · wiring up Claude Code
 
-薄壳，不含任何内容。最短路径：在内容仓库里跑 `plug init --pilot claude-code`——它做完下面 A 的 1–5（真实绝对路径、合并不覆盖、幂等），然后 `plug index`、`plug check --contact claude-code`。手动装法如下：
+A thin shell with no content in it. Shortest path: run `plug init --pilot claude-code` inside the content repo —
+it does steps 1–5 of A below (real absolute paths, merged not overwritten, idempotent) — then `plug index`,
+`plug status`, `plug check --contact claude-code`. By hand:
 
-**A. 项目级（推荐，内容仓库自带）**
-1. `pilots/claude-code/CLAUDE.md` → 复制为 `<内容仓库>/CLAUDE.md`，填 `<tool-…>`。
-2. `settings.template.json` → 合进 `<内容仓库>/.claude/settings.json`，把 `//c/<content-repo>`、`//c/<entryplug-repo>` 换成绝对路径。
-3. `.mcp.json` → 复制到 `<内容仓库>/.mcp.json`（`plug` 要在 PATH：`pip install -e <entryplug>`）。
-4. `plug index` 会把每件装备的 `SKILL.md` 镜像到 `<内容仓库>/.claude/skills/<装备>/SKILL.md`。
-5. `gates/hooks/pre-commit` → `<内容仓库>/.git/hooks/pre-commit`。
-6. `plug check --contact claude-code` 四步全绿。
+**A. Project level (recommended, the content repo carries it)**
+1. `pilots/claude-code/CLAUDE.md` → copy to `<content-repo>/CLAUDE.md`, fill in the `<tool-…>` slots.
+2. `settings.template.json` → merge into `<content-repo>/.claude/settings.json`; replace `//c/<content-repo>`,
+   `//c/<entryplug-repo>` and `<equipment>` with the real paths and names.
+3. `.mcp.json` → copy to `<content-repo>/.mcp.json` (`plug` must be on PATH: `pip install -e <entryplug>`).
+4. `plug index` mirrors every equipment's `SKILL.md` to `<content-repo>/.claude/skills/<equipment>/SKILL.md`.
+5. `gates/hooks/pre-commit` → `<content-repo>/.git/hooks/pre-commit`.
+6. `plug check --contact claude-code`, four steps, all green.
 
-**B. 插件形式**：本目录就是一个插件根（`.claude-plugin/plugin.json` + `hooks/hooks.json` + `.mcp.json`），`claude plugin add <本目录>`；deny 规则和 pre-commit 仍按 A 的 2、5 装到内容仓库（插件装不了 deny）。
+**B. As a plugin**: this directory is a plugin root (`.claude-plugin/plugin.json` + `hooks/hooks.json` +
+`.mcp.json`); `claude plugin add <this directory>`. The deny rules and pre-commit still go into the content repo
+by A's steps 2 and 5 — a plugin cannot install deny rules.
 
-## 记住三件事
+## The SessionStart panel
 
-- deny 只认 `Edit()` / `Read()`；`Write()` 规则从不被检查。不要 deny `Read(self/RULES.md)`——驾驶员得读规则。
-- deny 在 bypassPermissions 下也生效，但挡不住 `python -c` 直写；兜底是 pre-commit。
-- 升级 Claude Code 当天跑 `plug check --contact claude-code`；换模型跑一遍 `tests/acceptance.py`。
+`plug status` is wired to `SessionStart` (matcher `startup|resume|clear`) with `--emit`, which hands the panel
+over as `additionalContext`. That is a panel of measured facts, not a briefing: it never injects the rules or
+any search result.
+
+```json
+{ "hooks": { "SessionStart": [ { "matcher": "startup|resume|clear",
+  "hooks": [ { "type": "command", "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
+```
+
+## Three things worth remembering
+
+- deny only understands `Edit()` / `Read()`; a `Write()` rule is never checked. Never deny `Read(self/RULES.md)` —
+  the pilot has to read the rules.
+- deny applies under bypassPermissions too, but it cannot stop `python -c` writing directly; the backstop is pre-commit.
+- Run `plug check --contact claude-code` the day you upgrade Claude Code; run `tests/acceptance.py` when you change model.

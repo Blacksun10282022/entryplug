@@ -1,13 +1,20 @@
-# 暴走封锁（禁令①）最硬的一道：git pre-commit。
-# 做什么：提交触及受保护路径（默认 self/RULES.md · self/facts/** · tools/**，教材目录除外；见 plug.yaml protected/unprotected）
-#         且没有 KB_APPROVE=1 → 拒绝，一行理由；其余提交：重建索引 + 体检 0 ERROR 才放行；写 .kb/hooks/precommit 上次触发时间。
-# 输入：git 暂存区（git diff --cached --name-only）；测试与初期接触可用环境变量 PLUG_STAGED（换行分隔的路径）代替 git。
-# 输出：退出码 0 放行 / 1 拒绝；理由一行打到 stderr。找不到 plug.yaml 也拒绝（这一道 fail-closed）。
-# 不做什么：不读不改内容；不区分谁在提交（主人也一样：批准 = plug apply，它会设 KB_APPROVE=1）；不 git add 生成物（D19）。
-# 谁调用：内容仓库的 .git/hooks/pre-commit（模板 gates/hooks/pre-commit，一行 exec python <本文件>）· contact 第 4 步 · tests。
-# 跨 harness：Claude Code、Codex、任何脚本直写都过这一道；Codex 没有 permissions.deny，这是它那边禁令①唯一的一道。
-# 依赖：entryplug（pip install -e .）；未安装时回退到本仓库路径。
-# 记录 / 提议 / 教材 / 资料以外的 tools/** 都受保护——驾驶员随时可写可提交的只有 records/ proposals/ corpus/。
+# The berserk lock (prohibition ①), the hardest of the layers: a git pre-commit hook.
+# What: a commit that touches a protected path (by default self/RULES.md · self/facts/** · tools/** minus the
+#       corpus; see plug.yaml protected/unprotected) without KB_APPROVE=1 is refused with one line of reason.
+#       Every other commit: rebuild the index, then check must report 0 ERROR to pass. Stamps .kb/hooks/precommit.
+# In:   the git index (git diff --cached --name-only); tests and first contact can pass PLUG_STAGED instead
+#       (newline-separated paths).
+# Out:  exit 0 = pass, 1 = refused; the reason is one line on stderr. No plug.yaml is also a refusal — this
+#       gate is the fail-closed one.
+# Not:  never reads or edits content; never asks who is committing (the owner is no exception: approving is
+#       `plug apply`, which is what sets KB_APPROVE=1); never git-adds generated files (D19).
+#       `.plug-off` does NOT affect this gate — nothing turns the berserk lock off.
+# Who:  the content repo's .git/hooks/pre-commit (template gates/hooks/pre-commit, one line exec'ing this file)
+#       · contact step ④ · tests.
+# Note: Claude Code, Codex and any script writing directly all pass through here. Codex has no permissions.deny,
+#       so on that side this is the only layer of prohibition ①. What a pilot may write and commit freely is
+#       records/, proposals/, corpus/, work/ and workshop/ — nothing else.
+# Deps: entryplug (pip install -e .); falls back to this repo's path when it is not installed.
 import os, subprocess, sys, time
 from pathlib import Path
 
@@ -35,21 +42,22 @@ def main():
     try:
         cfg = config.load(os.environ.get("PLUG_ROOT") or config.find_root())
     except FileNotFoundError as e:
-        print("暴走封锁：%s——没有 plug.yaml 的仓库不该装这个钩子；先修配置" % e, file=sys.stderr)
+        print("berserk lock: %s — a repo without plug.yaml should not have this hook; fix the config first" % e, file=sys.stderr)
         return 1
     files = staged(cfg["root"])
     stamp(cfg, "precommit")
     hit = [f for f in files if config.is_protected(cfg, f)]
     if hit and os.environ.get("KB_APPROVE") != "1":
-        more = "（共 %d 个）" % len(hit) if len(hit) > 1 else ""
-        print("暴走封锁：提交触及受保护路径 %s%s——规则和装备只能写改装申请（proposals/pending/）；主人批准 = plug apply" % (hit[0], more), file=sys.stderr)
+        more = " (%d in total)" % len(hit) if len(hit) > 1 else ""
+        print("berserk lock: this commit touches the protected path %s%s — rules and equipment can only be changed "
+              "through a refit request (proposals/pending/); the owner approves with plug apply" % (hit[0], more), file=sys.stderr)
         return 1
     from entryplug import check, index
     index.build(cfg)
     r = check.run(cfg, expire=False)
     if r["errors"]:
         e = r["errors"][0]
-        print("体检 %d 个 ERROR，提交被拒：%s · %s · %s" % (len(r["errors"]), e["code"], e["file"], e["msg"]), file=sys.stderr)
+        print("check found %d ERROR(s), commit refused: %s · %s · %s" % (len(r["errors"]), e["code"], e["file"], e["msg"]), file=sys.stderr)
         return 1
     return 0
 

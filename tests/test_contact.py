@@ -1,4 +1,5 @@
-# 初期接触（plug check --contact）：四步各一行；钩子与 deny 装好 → 全绿；缺 deny（Claude Code）或缺钩子 → 那一步 FAIL；结果写进数字页。
+# First contact (plug check --contact): one line per step; with the hooks and deny installed everything is green;
+# without deny (Claude Code) or without the hook that step FAILs; the result is appended to the numbers page.
 import json, sys
 from conftest import ROOT, plug
 
@@ -21,19 +22,47 @@ def test_contact_all_green_both_pilots(git_repo):
         r = plug(root, "check", "--contact", pilot)
         assert r.returncode == 0, r.stdout + r.stderr
         lines = r.stdout.splitlines()
-        assert lines[0].startswith("初期接触 · %s · harness " % pilot)
+        assert lines[0].startswith("first contact · %s · harness " % pilot)
         assert [l[:1] for l in lines[1:5]] == ["①", "②", "③", "④"] and all(" OK " in l for l in lines[1:5])
-        assert "中文查询「" in lines[2] and "命中" in lines[2] and "exit 2" in lines[3]
-        assert lines[-1] == "初期接触，无异常"
-    assert "Codex 没有 permissions.deny" in r.stdout
-    assert "初期接触 codex" in git_repo["numbers_path"].read_text(encoding="utf-8")
+        assert "Chinese query" in lines[2] and "hit" in lines[2] and "exit 2" in lines[3]
+        assert lines[-1] == "first contact, nothing wrong"
+    assert "Codex has no permissions.deny" in r.stdout
+    assert "first contact codex" in git_repo["numbers_path"].read_text(encoding="utf-8")
 
 
 def test_contact_fails_without_deny_or_hook(git_repo):
     root = git_repo["root"]
     install(root, deny=False)
     r = plug(root, "check", "--contact", "claude-code")
-    assert r.returncode == 1 and "④ 受保护写入 FAIL" in r.stdout and "接入坏了" in r.stdout and "第 4 步" in r.stdout
+    assert r.returncode == 1 and "④ protected write FAIL" in r.stdout and "the integration is broken" in r.stdout and "step 4" in r.stdout
     (root / ".git/hooks/pre-commit").unlink()
     r = plug(root, "check", "--contact", "codex")
-    assert r.returncode == 1 and "没装 pre-commit 钩子" in r.stdout
+    assert r.returncode == 1 and "no pre-commit hook installed" in r.stdout
+def test_contact_without_a_dictionary_is_not_a_broken_integration(git_repo):
+    """A content repo with no dict/ used to fail step 2 outright and be declared broken, while MCP was healthy.
+    The probe now falls back to the index; with nothing indexed to probe with the hit count is simply not asserted."""
+    import shutil
+    from entryplug import config, contact
+    root = git_repo["root"]
+    install(root)
+    shutil.rmtree(root / "tools/sunzi/dict")
+    assert plug(root, "index").returncode == 0
+    cfg = config.load(root)
+    q, src = contact.probe_query(cfg)
+    assert q and src == "index", (q, src)
+    r = plug(root, "check", "--contact", "claude-code")
+    lines = r.stdout.splitlines()
+    assert " OK " in lines[2] and "(index)" in lines[2], lines[2]
+    assert r.returncode == 0 and lines[-1] == "first contact, nothing wrong", r.stdout
+    cfg["index_path"].unlink()
+    assert contact.probe_query(cfg) == (None, None)      # no index either: still not a broken integration
+
+
+def test_contact_step_four_does_not_claim_deny_is_in_force(git_repo):
+    """deny rules live in the content repo's settings and bind only a session whose project root is that repo.
+    A file check can prove they are written, never that they are in force, and step 4 must say so."""
+    root = git_repo["root"]
+    install(root)
+    r = plug(root, "check", "--contact", "claude-code")
+    step4 = r.stdout.splitlines()[4]
+    assert "written, NOT proven in force" in step4 and "project root is this repo" in step4, step4

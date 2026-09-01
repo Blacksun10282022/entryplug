@@ -1,4 +1,4 @@
-# index · 2026-08-29 18:43 · 38 文件 · 107 块 · entryplug 0.1.0
+# index · 2026-09-01 07:43 · 38 files · 113 chunks · entryplug 0.1.0
 ## tools/sunzi
 - tools/sunzi/SKILL.md · sunzi · manual · 
 - tools/sunzi/READING.md · READING · reading · 

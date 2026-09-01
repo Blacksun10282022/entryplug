@@ -1,4 +1,5 @@
-# 动词 eval：公开小金标在示例上 recall 非零且中英同量级；中文 recall 为零 = ERROR（退出码 1）；金标格式的字段都认。
+# Verb eval: the public mini gold set scores non-zero on the example and zh is in the same league as en;
+# zero recall on Chinese is an ERROR (exit 1); every field of the gold-set format is understood.
 from conftest import ROOT, plug
 
 GOLD = ROOT / "bench" / "public" / "goldset-sunzi.yaml"
@@ -18,7 +19,7 @@ def test_chinese_zero_is_error(repo, tmp_path):
     g = tmp_path / "g.yaml"
     g.write_text("version: 1\nscope: corpus\ncases:\n  - {id: a, q: 这个词肯定不在教材里面出现过吧, expect: [sunzi-01-shiji]}\n  - {id: b, q: deception, scope: tools, expect: [gui-dao]}\n", encoding="utf-8")
     r = plug(repo["root"], "eval", str(g))
-    assert r.returncode == 1 and "ERROR 中文查询 recall 为零" in r.stdout
+    assert r.returncode == 1 and "ERROR recall on Chinese queries is zero" in r.stdout
     g.write_text("version: 1\ncases:\n  - {q: 诡道, expect: [sunzi-01-shiji], lang: zh, per_doc: 2}\n  - {q: [势, 形], scope: tools, expect: [shi, xing]}\n", encoding="utf-8")
     r = plug(repo["root"], "eval", str(g), "--k", "5")
     assert r.returncode == 0 and "recall@5 1.00" in r.stdout

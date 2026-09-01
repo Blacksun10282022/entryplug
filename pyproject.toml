@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "entryplug"
 version = "0.1.0"
-description = "Entryplug (插入栓): the plug between one person's written judgment and the agent that uses it — three file shapes, one read-only search, two machine-enforced locks, one check."
+description = "Entry Plug: the machine between one person's written judgment and the agent that uses it — three file shapes, one read-only search, two machine-enforced locks, one check."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }

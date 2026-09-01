@@ -1,36 +1,39 @@
-# plug.yaml — 内容仓库里唯一允许出现路径的地方。所有路径相对本文件所在目录。
-# 示例：《孙子兵法》示例装备（CC0）。真实内容仓库照此写一份，机器永远不知道内容仓库在哪。
-machine: entryplug 0.1.0        # 钉住机器版本；plug check 头部会核
-shape_version: 1                # 机器不认识的形状版本 = ERROR，拒跑
+# plug.yaml — the only place in a content repo where paths may appear. Every path is relative to this file.
+# This one is the Sunzi example equipment (CC0). A real content repo writes its own; the machine never knows
+# where a content repo is, it only knows root.
+machine: entryplug 0.1.0        # pins the machine version; the plug check header verifies it
+shape_version: 1                # a shape version the machine does not know is an ERROR: it refuses to run
 
-self: self                      # 素体：RULES.md · facts/ · style.md · records/
-proposals: proposals            # 改装申请：pending/ · rejected/ · applied/ · tools/
-index: .kb/index.sqlite         # gitignored，随时重建
-index_md: index.md              # 人读索引，一页一行
-numbers: self/数字.md           # 同步率（数字页），plug check 生成
-hooks: .kb/hooks                # 钩子「上次触发」戳
-pin: .kb/pin.md                 # 压缩钉子
-language: 中文                  # 钉子里的「回复语言」
+self: self                      # the Base: RULES.md · facts/ · style.md · records/
+proposals: proposals            # refit requests: pending/ · rejected/ · applied/ · tools/
+index: .kb/index.sqlite         # gitignored, rebuilt at will
+index_md: index.md              # the human-readable index, one line per page
+numbers: self/数字.md           # the sync rate (numbers page), written by plug check
+hooks: .kb/hooks                # "last fired" stamps for the hooks
+pin: .kb/pin.md                 # the compaction pin
+language: 中文                  # the "answer in" line of the pin
 
 tools:
   - name: sunzi
     path: tools/sunzi
-    depends: []                 # 允许 [[其他工具/条目]] 链接的工具名
-    ttl_days: {default: 90, price: 30, profile: 90}   # 资料保质期（按 kind）
-    unreviewed: 2               # 迁移对账：词典里应有的 [?] 行数
+    depends: []                 # equipment names this one may link to with [[other-tool/entry]]
+    ttl_days: {default: 90, price: 30, profile: 90}   # material shelf life, by kind
+    unreviewed: 2               # migration reconciliation: how many [?] lines the dictionary should have
 
-pilots:                         # plug index 把每件装备的 SKILL.md 镜像到这些目录
-  claude-code: {skills: .claude/skills}
-  codex: {skills: .agents/skills}
+pilots:                         # plug index mirrors every SKILL.md into these directories
+  claude-code: {skills: .claude/skills, user_skills: "~/.claude/skills"}
+  codex: {skills: .agents/skills, user_skills: "~/.agents/skills"}
 
-outbound:                       # 出击封锁：命中即 PreToolUse exit 2（tool = 工具名正则；match = 对工具输入 JSON 的正则）
+outbound:                       # sortie lock: a hit is PreToolUse exit 2 (tool = regex on the tool name; match = regex on the tool input JSON)
   - tool: "^Bash$"
     match: "(?i)\\b(curl|wget|ssh|scp|sendmail|git push)\\b"
   - tool: "(?i)^mcp__.*(send|post|submit|pay|email|message|publish)"
 
-protected:                      # 暴走封锁：提交触及这些路径需要 KB_APPROVE=1（只有 plug apply 会设）
-  - self/RULES.md
+protected:                      # berserk lock: committing these needs KB_APPROVE=1, which only plug apply sets.
+  - self/RULES.md               # Anything under tools/ that is not registered above is NOT protected.
   - self/facts/**
   - tools/**
-unprotected:
+unprotected:                    # the corpus is appended to freely; work/ and workshop/ are the free zones
   - "**/corpus/**"
+  - "work/**"
+  - "workshop/**"

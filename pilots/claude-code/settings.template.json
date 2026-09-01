@@ -1,22 +1,26 @@
 {
   "_readme": [
-    "合进 <内容仓库>/.claude/settings.json。占位 //c/<content-repo> 换成内容仓库的绝对路径（Windows 写成 //<盘符>/<路径> 形式；路径会被规范成 POSIX）。",
-    "deny 只认 Edit(path) / Read(path)：Write(path) 规则会被接受但从不检查，等于没写。Edit 规则覆盖所有内置改文件的工具（含 Write）。",
-    "不要 deny Read(self/RULES.md)：驾驶员必须能读规则。Read() 只用在它不该读也不该改的东西上（钩子的上次触发戳）。",
-    "deny 在所有模式下生效，含 bypassPermissions；但挡不住脚本直写（原生 Windows 没有沙箱）——兜底是 gates/precommit.py。",
-    "钩子命令里的路径换成你克隆 entryplug 的位置；用插件形式安装时改用 hooks/hooks.json（${CLAUDE_PLUGIN_ROOT}）。"
+    "Merge into <content-repo>/.claude/settings.json. Replace //c/<content-repo> with the repo's absolute path (on Windows write //<drive>/<path>; paths are normalised to POSIX) and <equipment> with each equipment name registered in plug.yaml.",
+    "deny only understands Edit(path) / Read(path): a Write(path) rule is accepted but never checked, so it does nothing. An Edit rule covers every built-in file-editing tool, Write included.",
+    "Never deny Read(self/RULES.md): the pilot has to be able to read the rules. Read() is only for things it should neither read nor change (the hooks' last-fired stamps).",
+    "deny rules cover self/ and the equipment registered in plug.yaml. work/, workshop/ and any unregistered directory under tools/ are deliberately left writable — that is where products and new equipment are built.",
+    "deny applies in every mode, bypassPermissions included; it cannot stop a script writing directly (native Windows has no sandbox) — the backstop is gates/precommit.py.",
+    "These rules bind a session whose project root is this content repo. An agent working from another root edits these files unimpeded and is only stopped at commit time by pre-commit; plug check --contact proves the rules are written, not that they are in force.",
+    "Replace the paths in the hook commands with wherever you cloned entryplug. Installing as a plugin uses hooks/hooks.json instead (${CLAUDE_PLUGIN_ROOT}).",
+    "`plug init --pilot claude-code` writes all of this for you, with real absolute paths, merged and idempotent."
   ],
   "permissions": {
     "deny": [
       "Edit(//c/<content-repo>/self/RULES.md)",
       "Edit(//c/<content-repo>/self/facts/**)",
       "Edit(//c/<content-repo>/self/style.md)",
-      "Edit(//c/<content-repo>/tools/**/SKILL.md)",
-      "Edit(//c/<content-repo>/tools/**/dict/**)",
-      "Edit(//c/<content-repo>/tools/**/playbooks/**)",
-      "Edit(//c/<content-repo>/tools/**/materials/**)",
-      "Edit(//c/<content-repo>/tools/**/checks/**)",
       "Edit(//c/<content-repo>/plug.yaml)",
+      "Edit(//c/<content-repo>/tools/<equipment>/SKILL.md)",
+      "Edit(//c/<content-repo>/tools/<equipment>/READING.md)",
+      "Edit(//c/<content-repo>/tools/<equipment>/dict/**)",
+      "Edit(//c/<content-repo>/tools/<equipment>/playbooks/**)",
+      "Edit(//c/<content-repo>/tools/<equipment>/materials/**)",
+      "Edit(//c/<content-repo>/tools/<equipment>/checks/**)",
       "Read(//c/<content-repo>/.kb/hooks/**)"
     ]
   },
@@ -34,7 +38,14 @@
       {
         "matcher": "compact",
         "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\" --emit", "timeout": 30 }]
+      },
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [{ "type": "command", "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 }]
       }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/stop.py\"", "timeout": 20 }] }
     ]
   }
 }

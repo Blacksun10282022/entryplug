@@ -1,4 +1,5 @@
-# MCP：stdio JSON-RPC 的四个方法；唯一工具 search；中文查询非零；坏 JSON / 未知方法 / 内部错误都回错误而不是死掉；子进程也能通。
+# MCP: the four stdio JSON-RPC methods; one tool, search; a Chinese query is non-zero; bad JSON / unknown method /
+# an internal error all come back as errors instead of killing the process; it also works over a real subprocess.
 import io, json, subprocess, sys
 from entryplug import mcp
 from conftest import ROOT
@@ -24,7 +25,7 @@ def test_handshake_list_and_call(repo):
     assert res[0]["result"]["serverInfo"]["name"] == "entryplug" and res[0]["result"]["protocolVersion"] == "2025-06-18"
     assert [t["name"] for t in res[1]["result"]["tools"]] == ["search"] and "query" in res[1]["result"]["tools"][0]["inputSchema"]["required"]
     text = res[2]["result"]["content"][0]["text"]
-    assert text.startswith("gui-dao · 诡道") and "已显示 2/" in text and res[2]["result"]["isError"] is False
+    assert text.startswith("gui-dao · 诡道") and "showing 2/" in text and res[2]["result"]["isError"] is False
     assert "sunzi-07-junzheng#1" in res[3]["result"]["content"][0]["text"]
     assert res[4]["result"] == {}
 

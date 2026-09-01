@@ -1,4 +1,6 @@
 #!/bin/sh
-# 内容仓库的 git pre-commit（暴走封锁）。复制到 <内容仓库>/.git/hooks/pre-commit，把下面的路径改成你克隆 entryplug 的位置。
-# Windows 写 //c/... 或 C:/...；git 会用 sh 跑它。KB_APPROVE=1 只有 plug apply 会设；不要手设，也不要 --no-verify。
+# The content repo's git pre-commit hook (the berserk lock). Copy to <content-repo>/.git/hooks/pre-commit and
+# change the path below to wherever you cloned entryplug.
+# On Windows write //c/... or C:/...; git runs it with sh. KB_APPROVE=1 is set by plug apply and by nothing else;
+# do not set it by hand, and do not use --no-verify.
 exec python "//c/<entryplug-repo>/gates/precommit.py"

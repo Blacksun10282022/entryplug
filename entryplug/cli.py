@@ -1,13 +1,13 @@
-# 做什么：命令 `plug` 的入口——五个动词 index · check · apply · eval · search，外加 mcp（stdio 服务）与 hash（算提议的 base）。
-# 输入：argv；--root 指内容仓库（否则 PLUG_ROOT / 向上找 plug.yaml）。
-# 输出：各动词的文本报告到 stdout（强制 UTF-8，Windows 控制台也不乱码）；退出码 0 = 通过，1 = 有 ERROR / 被拒。
-# 不做什么：不含任何领域逻辑；不做交互；不自动定时；不注入任何东西给驾驶员。
-# 谁调用：主人（终端）· 驾驶员（Bash）· 钩子脚本（gates/）· .mcp.json（plug mcp）· 测试。
-# 约定：每个动词一个模块，这里只做参数分发；模块按需 import，`plug search` 不必加载 check 的代码。
-# 退出码：check/eval 有 ERROR → 1；apply 拒绝 → 1；找不到 plug.yaml → 2。
-# 形状版本不认识时 index/check/apply/search 一律拒跑（config.version_ok）。
-# 依赖：stdlib argparse。
-# 版本：entryplug/__init__.py。
+# What: the `plug` command — five verbs (index · check · apply · eval · search) plus status · init · mcp · hash.
+# In:   argv; --root names the content repo (otherwise PLUG_ROOT, otherwise walk up looking for plug.yaml).
+# Out:  each verb's text report on stdout (forced UTF-8, so a Windows console does not mangle it);
+#       exit 0 = passed, 1 = ERRORs / refused, 2 = no plug.yaml found.
+# Not:  contains no domain logic; is not interactive; schedules nothing; injects nothing into the pilot.
+# Who:  the owner (a terminal) · a pilot (Bash) · the hook scripts (gates/) · .mcp.json (plug mcp) · tests.
+# Note: one module per verb; this file only dispatches arguments and imports on demand, so `plug search` never
+#       loads check's code. When the shape version is unknown the machine refuses to run everything except
+#       check and status — the two commands whose whole job is to tell you what is wrong.
+# Deps: stdlib argparse. Versions live in entryplug/__init__.py.
 import argparse, sys
 from . import __version__, SHAPE_VERSION, config
 
@@ -21,33 +21,37 @@ def _utf8():
 
 
 def parser():
-    ap = argparse.ArgumentParser(prog="plug", description="entryplug（插入栓）· 索引 · 查 · 体检 · 批提议 · 评测")
-    ap.add_argument("--root", help="内容仓库根（含 plug.yaml）")
+    ap = argparse.ArgumentParser(prog="plug", description="entryplug (Entry Plug) · index · search · check · status · approve a proposal · eval")
+    ap.add_argument("--root", help="content repo root (the directory holding plug.yaml)")
     ap.add_argument("--version", action="version", version="entryplug %s · shape v%d" % (__version__, SHAPE_VERSION))
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("index", help="建 / 增量重建索引，生成 index.md 与打法目录，镜像说明书")
-    p.add_argument("--full", action="store_true", help="全量重建")
-    p = sub.add_parser("check", help="体检：ERROR / WARNING 清单 + 头部自检 + 一页报告 + 同步率")
-    p.add_argument("--contact", choices=["claude-code", "codex"], help="初期接触：接入 smoke 四步")
-    p.add_argument("--no-expire", action="store_true", help="不把 30 天未批的提议移到 rejected/")
-    p.add_argument("--quiet", action="store_true", help="只打印清单，不打印报告")
-    p = sub.add_parser("apply", help="批一条改装申请：核 base → 落地 → 体检 → 提交")
+    p = sub.add_parser("index", help="build / incrementally rebuild the index, write index.md and the playbook directory, mirror the manuals")
+    p.add_argument("--full", action="store_true", help="full rebuild")
+    p = sub.add_parser("check", help="check-up: ERROR / WARNING list + header self-check + one page of report + sync rate")
+    p.add_argument("--contact", choices=["claude-code", "codex"], help="first contact: the four-step integration smoke test")
+    p.add_argument("--no-expire", action="store_true", help="do not move proposals unapproved for 30 days to rejected/")
+    p.add_argument("--quiet", action="store_true", help="print the findings only, no report")
+    p = sub.add_parser("status", help="boot self-check: one line per layer, then a verdict (EVA panel)")
+    p.add_argument("--emit", action="store_true", help="print the panel as SessionStart additionalContext JSON")
+    p = sub.add_parser("apply", help="approve one refit request: verify base → land → check → commit (owner only)")
     p.add_argument("proposal")
-    p.add_argument("--reject", metavar="REASON", help="驳回：移到 rejected/ 并写一行理由")
-    p.add_argument("--dry-run", action="store_true", help="只看 diff，不落地")
-    p = sub.add_parser("eval", help="金标 recall@10；中文查询 recall 为零 = ERROR")
+    p.add_argument("--reject", metavar="REASON", help="reject: move to rejected/ and write one line of reason")
+    p.add_argument("--dry-run", action="store_true", help="show the diff only, land nothing (allowed for anyone)")
+    p.add_argument("--owner", action="store_true", help="the owner is typing this: run even inside an agent environment")
+    p = sub.add_parser("eval", help="gold-set recall@10; zero recall on Chinese queries is an ERROR")
     p.add_argument("goldset")
     p.add_argument("--k", type=int, default=10)
-    p = sub.add_parser("search", help="查（与 MCP search 同一函数；默认只查词典 · 打法 · 记录，教材要 --scope corpus）")
+    p = sub.add_parser("search", help="search (the same function as MCP search; dict · playbooks · records by default, corpus needs --scope corpus)")
     p.add_argument("queries", nargs="+")
-    p.add_argument("--scope", default="tools", choices=["tools", "corpus", "all"], help="tools = 词典 · 打法 · 记录（默认）· corpus = 教材 · all")
+    p.add_argument("--scope", default="tools", choices=["tools", "corpus", "all"], help="tools = dict · playbooks · records (default) · corpus = the corpus · all")
     p.add_argument("--tool"), p.add_argument("--kind")
     p.add_argument("--k", type=int, default=8), p.add_argument("--per-doc", type=int, default=2)
     p.add_argument("--json", action="store_true")
-    p = sub.add_parser("init", help="把闸门与驾驶员薄壳装进内容仓库（pre-commit · deny · 钩子 · .mcp.json · 地图 · 镜像），幂等")
+    p = sub.add_parser("init", help="install the gates and pilot shells into a content repo (pre-commit · deny · hooks · .mcp.json · map · mirror); idempotent")
     p.add_argument("--pilot", choices=["claude-code", "codex", "both"], default="both")
-    sub.add_parser("mcp", help="stdio MCP 服务（唯一工具 search）")
-    p = sub.add_parser("hash", help="算文件的 base 短哈希（写提议用）")
+    p.add_argument("--link-skills", action="store_true", help="also copy every SKILL.md into the user-level skills directory (manual trigger)")
+    sub.add_parser("mcp", help="stdio MCP server (one tool: search)")
+    p = sub.add_parser("hash", help="the base short hash of a file (for writing a proposal)")
     p.add_argument("file")
     return ap
 
@@ -61,15 +65,16 @@ def main(argv=None):
         print("plug: %s" % e, file=sys.stderr)
         return 2
     shape_ok, _ = config.version_ok(cfg)
-    if not shape_ok and a.cmd != "check":
-        print("plug: plug.yaml 的形状版本 %r 机器不认识（本机 v%d）——拒跑；先 plug check" % (cfg.get("shape_version"), SHAPE_VERSION), file=sys.stderr)
+    if not shape_ok and a.cmd not in ("check", "status"):
+        print("plug: plug.yaml declares shape version %r, which this machine (v%d) does not know — refusing to run; "
+              "start with plug check" % (cfg.get("shape_version"), SHAPE_VERSION), file=sys.stderr)
         return 1
     if a.cmd == "index":
         from . import index
         s = index.build(cfg, full=a.full)
-        print("index: %d 文件 · %d 块 · 变动 %d · 删除 %d · 教材 %d" % (s["files"], s["chunks"], s["changed"], s["removed"], s["docs"]))
+        print("index: %d files · %d chunks · changed %d · removed %d · corpus docs %d" % (s["files"], s["chunks"], s["changed"], s["removed"], s["docs"]))
         for e in s["errors"]:
-            print("  形状 ERROR " + e)
+            print("  shape ERROR " + e)
         return 0
     if a.cmd == "check":
         if a.contact:
@@ -79,9 +84,15 @@ def main(argv=None):
         r = check.run(cfg, expire=not a.no_expire)
         print(report.format_findings(r) if a.quiet else report.report(cfg, r))
         return 1 if r["errors"] else 0
+    if a.cmd == "status":
+        from . import status
+        if not shape_ok:
+            print("plug: plug.yaml declares shape version %r, unknown to this machine (v%d) — run plug check"
+                  % (cfg.get("shape_version"), SHAPE_VERSION), file=sys.stderr)
+        return status.run(cfg, emit=a.emit)
     if a.cmd == "apply":
         from . import apply
-        return apply.run(cfg, a.proposal, reject=a.reject, dry_run=a.dry_run)
+        return apply.run(cfg, a.proposal, reject=a.reject, dry_run=a.dry_run, owner=a.owner)
     if a.cmd == "eval":
         from . import eval as ev
         return ev.run(cfg, a.goldset, k=a.k)
@@ -97,7 +108,7 @@ def main(argv=None):
         return 0
     if a.cmd == "init":
         from . import init
-        return init.run(cfg, a.pilot)
+        return init.run(cfg, a.pilot, link=a.link_skills)
     if a.cmd == "mcp":
         from . import mcp
         return mcp.serve(cfg)

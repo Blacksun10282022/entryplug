@@ -1,19 +1,20 @@
-# registry · 私有基准登记（只登记哈希，不登记案例）
+# registry · the private benchmark register (hashes only, never the cases)
 
-每次跑私有真实基准之前，先在这里加一行并提交；结果引用这一行。先例：ARC Prize 用私有评测集出公开榜。
+Before every run of the private, real benchmark, add a line here and commit it; results may only cite that line.
+Precedent: ARC Prize publishes a public leaderboard from a private evaluation set.
 
-| 登记日 | 案例文件 sha256 | 案例数 | 协议版本 | 模型 · harness | 备注 |
+| registered | case file sha256 | cases | protocol version | model · harness | note |
 |---|---|---|---|---|---|
-| （尚无） | | | | | 第一次盲评前登记 |
+| (none yet) | | | | | register before the first blind run |
 
-## 结果登记（自报 vs 测得，按装备分，永远没有总分）
+## Result register (self-reported vs measured, split by equipment, never a total)
 
-| 日期 | 登记行 | 装备 | n | 盲选按系统做 | 像不像我 1–5 | 3 次一致 | 金标 recall@10 | 成本倍数 | 自报一句 |
+| date | register line | equipment | n | blind pick went the system's way | sounds like me 1–5 | same answer 3 times | gold-set recall@10 | cost multiple | one sentence, self-reported |
 |---|---|---|---|---|---|---|---|---|---|
-| （尚无） | | | | | | | | | |
+| (none yet) | | | | | | | | | |
 
-## 漂移表（换模型或重跑，一行一次，分数掉了也登）
+## Drift table (a line per model change or rerun; a drop gets registered too)
 
-| 日期 | 模型 · harness | 登记行 | 变化 |
+| date | model · harness | register line | change |
 |---|---|---|---|
-| （尚无） | | | |
+| (none yet) | | | |

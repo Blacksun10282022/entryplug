@@ -1,12 +1,16 @@
-# 做什么：`plug search` 与 MCP `search` 共用的唯一查询函数——收一条或多条查询 → 别名扩展（确定性）→ FTS5 OR 查询
-#         → 各查询结果 round-robin 合并去重 → 每讲座限额 → 按讲座分组 → 紧凑索引行 + 尾行「已显示 k/N」。
-# 输入：cfg · queries（str 或 list）· scope（tools 默认 / corpus / all）· tool · kind · k（8 → 最多 60）· per_doc（2 → 5）。
-# 输出：{"rows": [...], "shown", "total", "queries"}；format() 给出文本：id · 出处 · 文件#L起-L止 [位置] · kind · ≤120 字摘录。
-# 不做什么：不重排、不打分、不读窗口（那是驾驶员的事，§8.1）；物理上写不了内容（只读连接）；不调 LLM。
-# 谁调用：cli（plug search）· mcp（tools/call search）· eval（recall@10）· contact（初期接触第 2 步）。
-# 查询构造（D22）：按空白 / 标点切词；≤4 字中文用字二元组短语，>4 字用 jieba 切出的 ≥2 字词；单字用前缀 "X"*；拉丁词小写。
-# dense_candidates 是 entryplug[dense] 的接口桩：同形候选行，本版本返回空列表。
-# 依赖：stdlib sqlite3 · jieba（经 index.tokens）。
+# What: the single query function shared by `plug search` and MCP `search` — take one or more queries →
+#       deterministic alias expansion → FTS5 OR query → round-robin merge of each query's list → per-doc cap →
+#       grouped by doc → compact index lines + a tail line "showing k/N".
+# In:   cfg · queries (str or list) · scope (tools default / corpus / all) · tool · kind · k (8 → max 60) · per_doc (2 → max 5).
+# Out:  {"rows": [...], "shown", "total", "queries"}; format_rows() renders text:
+#       id · source · file#Lstart-Lend [pos] · kind · excerpt (<=120 chars).
+# Not:  no reranking, no scoring, no window reading (that is the pilot's job, §8.1); physically cannot write
+#       content (read-only connection); never calls an LLM.
+# Who:  cli (plug search) · mcp (tools/call search) · eval (recall@10) · contact (first contact, step 2).
+# Note: query construction (D22) — split on whitespace/punctuation; CJK runs of <=4 chars become a bigram phrase,
+#       longer runs use jieba words of >=2 chars; a single character becomes a prefix "X"*; latin words lowercased.
+#       dense_candidates is the interface stub for entryplug[dense]: same row shape, empty in this version.
+# Deps: stdlib sqlite3 · jieba (via index.tokens).
 import json, re, sqlite3
 import jieba
 from .index import CJK
@@ -34,7 +38,8 @@ def term_parts(term):
 
 
 def expand(query, groups):
-    """别名扩展：查询里出现某组的任一成员（≥2 字，或恰等于单字标题）→ 加入该组全部成员。"""
+    """Alias expansion: if the query contains any member of a group (>=2 chars, or exactly equals a
+    one-character title), add every member of that group."""
     q, extra = query.strip(), []
     for group in groups:
         if any((len(m) >= 2 and m in q) or (len(m) == 1 and m == q) for m in group):
@@ -54,12 +59,12 @@ def fts_query(query, groups):
 
 def open_ro(cfg):
     if not cfg["index_path"].exists():
-        raise FileNotFoundError("没有索引 %s：先 plug index" % cfg["index"])
+        raise FileNotFoundError("no index at %s: run plug index first" % cfg["index"])
     return sqlite3.connect("file:%s?mode=ro" % cfg["index_path"].as_posix(), uri=True)
 
 
 def dense_candidates(cfg, queries, scope):
-    """entryplug[dense] 接口桩：返回与 FTS 同形的候选行列表（本版本无实现，恒为空）。"""
+    """Interface stub for entryplug[dense]: returns candidate rows in the same shape as FTS (empty here)."""
     return []
 
 
@@ -114,10 +119,12 @@ def format_rows(res):
     lines = []
     for r in res["rows"]:
         loc = "%s#L%s-L%s" % (r["file"], r["lstart"], r["lend"]) + (" [%s]" % r["pos"] if r["pos"] else "")
-        lines.append("%s · %s · %s · %s · %s%s" % (r["id"], r["source"], loc, r["kind"], r["excerpt"], " · 标题命中，可整讲读" if r["title_hit"] else ""))
-    tail = "已显示 %d/%d" % (res["shown"], res["total"])
-    if not res["total"]:                    # 0/0 不能哑着：说清范围与索引时间
-        hint = {"tools": "（默认只查词典 · 打法 · 记录；查教材加 scope=corpus）", "corpus": "（只查了教材；查词典 · 打法 · 记录用 scope=tools）"}.get(res.get("scope"), "")
-        tail += " · 范围 %s 无命中%s · 索引建于 %s" % (res.get("scope"), hint, res.get("built_at") or "未知（先 plug index）")
+        lines.append("%s · %s · %s · %s · %s%s" % (r["id"], r["source"], loc, r["kind"], r["excerpt"],
+                                                   " · title hit, the whole page is worth reading" if r["title_hit"] else ""))
+    tail = "showing %d/%d" % (res["shown"], res["total"])
+    if not res["total"]:                    # 0/0 must not stay mute: name the scope and the index time
+        hint = {"tools": " (default scope only covers dict · playbooks · records; add scope=corpus for the corpus)",
+                "corpus": " (corpus only; use scope=tools for dict · playbooks · records)"}.get(res.get("scope"), "")
+        tail += " · no hit in scope %s%s · index built %s" % (res.get("scope"), hint, res.get("built_at") or "never (run plug index)")
     lines.append(tail)
     return "\n".join(lines)

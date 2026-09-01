@@ -1,4 +1,5 @@
-# 形状：三种形状的字段表、观察行 / 规则行 / 教材的解析。每种「frontmatter 不合形状」在这里各坏一次。
+# Shapes: the field table for the three strict shapes, and parsing of observation lines / rule lines / corpus docs.
+# Every way frontmatter can be out of shape is broken once here.
 from pathlib import Path
 from entryplug import shapes
 
@@ -38,7 +39,7 @@ def test_entry_shape_errors():
     assert any("title" in e for e in parse(ENTRY.replace("title: 势\n", ""))["errors"])
     assert any("alias" in e for e in parse(ENTRY.replace("aliases: [势能, momentum]\n", ""))["errors"])
     assert any("kind" in e for e in parse(ENTRY.replace("kind: concept", "kind: thing"))["errors"])
-    assert any("未知字段" in e for e in parse(ENTRY.replace("title: 势\n", "title: 势\ncolour: red\n"))["errors"])
+    assert any("unknown field" in e for e in parse(ENTRY.replace("title: 势\n", "title: 势\ncolour: red\n"))["errors"])
     assert any("frontmatter" in e for e in parse("no frontmatter\n")["errors"])
     pb = ENTRY.replace("kind: concept", "kind: playbook")
     errs = parse(pb, "playbook")["errors"]

@@ -1,60 +1,158 @@
-# SHAPES · 形状 v1（字段表）
+# SHAPES · shape v1 (the field table)
 
-`shape_version: 1`。三种形状 + 一个规则文件 + 两种索引专用的；只加可选字段，不改必填字段。三种形状的未知键是 ERROR。字段表的真相在 `entryplug/shapes.py` 的 `SHAPES`。
+`shape_version: 1`. Three strict shapes + one rule file + two index-only ones; optional fields may be added,
+required fields may not. An unknown key in one of the three strict shapes is an ERROR. The truth of the field
+table is `SHAPES` in `entryplug/shapes.py`.
 
-## 内容条目 entry（词典 `dict/*.md` 与打法 `playbooks/*.md` 同一形状）
+The frontmatter keys are English; the section headings are Chinese. Both are on-disk vocabulary, not prose:
+they are what the shape *is*, so they stay put even though everything the machine says is in English. Changing
+one is shape v2 and a `plug migrate`, not an edit.
 
-| 字段 | 必填 | 说明 |
+## Entry (dictionary `dict/*.md` and playbooks `playbooks/*.md` share one shape)
+
+| field | required | notes |
 |---|---|---|
-| kind | ✓ | concept / method / playbook |
-| title | ✓ | 中文进这里；文件名一律 ASCII slug |
-| aliases | concept ✓（≥1；<2 是 WARNING） | 中文写法、英文、缩写、教材里的 ASR 误写 |
-| situation · when_not · stance | playbook ✓ | 打法的处境 / 反命中 / 姿态（warning · diagnostic · active …）|
-| legacy_id · origin | 可选 | 旧 id；来源 |
+| kind | yes | concept / method / playbook |
+| title | yes | Chinese goes here; the filename is always an ASCII slug |
+| aliases | concept: yes (>=1; <2 is a WARNING) | Chinese spellings, English, abbreviations, ASR mistakes from the corpus |
+| situation · when_not · stance | playbook: yes | the playbook's situation / counter-indication / stance (warning · diagnostic · active …) |
+| legacy_id · origin | optional | old id; where it came from |
 
-正文小节：词典 `定义 · 观察 · 关系 · 注`；打法 `原理 · 问题 · 练习 · 信号 / 反模式 / 退出条件`（可有 `动作`）。链接 `[[标题或别名]]`，跨装备 `[[装备名/标题]]`（装备要在 plug.yaml 里声明 depends）。
+Body sections: dictionary `定义 · 观察 · 关系 · 注`; playbook `原理 · 问题 · 练习 · 信号 / 反模式 / 退出条件`
+(and optionally `动作`). Links are `[[title or alias]]`; across equipment, `[[equipment/title]]` — and that
+equipment has to be declared in plug.yaml's `depends`.
 
-观察行（`## 观察` 下的 `- ` 行）：
+Observation lines (the `- ` lines under `## 观察`):
 
 ```
-- 陈述 [[链接]]* ^pNNNN (src: doc-id#seq "锚句")      有据：锚句必须能在 doc 里 grep 到
-- [?] 陈述 … (src: …)                                    未审（迁移对账用）
-- 综合一句 ^pNNNN (src: ^p0001 ^p0002)                   综合：引其他行的锚点，必须存在
-- 无原句的一句 (src: doc-id p.12 [未锚])                 只能来自主人批过的提议
+- statement [[link]]* ^pNNNN (src: doc-id#seq "anchor sentence")   sourced: the sentence must grep in that doc
+- [?] statement … (src: …)                                          unreviewed (used during migration)
+- a synthesis ^pNNNN (src: ^p0001 ^p0002)                           synthesis: cites other lines' anchors, which must exist
+- a line with no original (src: doc-id p.12 [未锚])                 only from a proposal the owner approved
 ```
 
-## 记录 record（驾驶日志 `self/records/<日期>-<slug>.md`）
+## Record (the flight log, `self/records/<date>-<slug>.md`)
 
-| 字段 | 必填 | 说明 |
+| field | required | notes |
 |---|---|---|
-| tool · by · situation · verdict | ✓ | by = 驾驶员 · 模型 · 日期；verdict 先写，主人看之前落盘 |
-| chosen · outcome | 后补 | chosen = 主人选了什么（同意 / 同 verdict / 另一句）；outcome 里可写「它对 / 我对 / 说不清」|
+| tool · by · situation · verdict | yes | by = pilot · model · date; the verdict is written and saved before the owner sees it |
+| chosen · outcome | filled in later | chosen = what the owner picked; outcome may say 它对 / 我对 / 说不清 |
 
-正文三个固定小节：`依据`（点名的 R-id 必须存在；引 `records/…` 算引记录；带 `(src: doc#seq "原句")` 或 `^pNNNN` 算引文）· `最强反证` · `什么会改判`。分歧 = verdict ≠ chosen，现算不存。
+Three fixed body sections: `依据` (any R-id it names must exist; citing `records/…` counts as citing a record;
+`(src: doc#seq "sentence")` or `^pNNNN` counts as a quote) · `最强反证` · `什么会改判`. A disagreement is
+verdict != chosen, computed when asked and never stored.
 
-## 提议 proposal（改装申请 `proposals/pending/<日期>-<slug>.md`）
+A record holds a judgment, not a diary: the discipline is **you gave the owner options and he chose one → write
+one record on the spot**. The Stop hook (`gates/stop.py`) nudges once at the end of a session if none was
+written; it never blocks, and `.plug-off` silences it.
 
-| 字段 | 必填 | 说明 |
+## Proposal (a refit request, `proposals/pending/<date>-<slug>.md`)
+
+| field | required | notes |
 |---|---|---|
-| target | ✓ | 目标文件路径（新文件也写路径）|
-| base | ✓ | 目标文件当前内容的 git blob 短哈希（`plug hash <file>`）；新建写 `new` |
-| from | ✓ | 触发它的记录路径，或「学:doc-id」|
+| target | yes | the target file's path (a new file still gets a path) |
+| base | yes | the target's current git blob short hash (`plug hash <file>`); `new` for a new file |
+| from | yes | the record that triggered it, or `学:doc-id` |
 
-正文三段：`改成什么`（整文件 ```` ```md ```` 代码块，或第一行 `retire`）· `为什么` · `最强反证`。批过的进 `applied/`，驳回 / 过期的进 `rejected/`（末尾一行 `rejected: 日期 · 理由`）。
+Three body sections: `改成什么` (a whole-file ```` ```md ```` code block, or `retire` on the first line) ·
+`为什么` · `最强反证`. Approved ones go to `applied/`, rejected or expired ones to `rejected/` with a final
+`rejected: date · reason` line.
 
-## 规则文件 self/RULES.md（不是形状，一个文件）
+Every proposal ends with the owner's copy-paste block — `plug check` warns (code `footer`) when a pending one
+does not have it. Two forms, because `!` runs inside the pilot's own environment and `plug apply` refuses that:
+the chat form has to carry `--owner`. The block is generated by `apply.owner_lines()`, which is the only place
+its wording lives.
 
-文件头 `model: … reviewed: YYYY-MM-DD`；`## 小节` = 等级；每行 `- R12 · 陈述 [YYYY-MM · 来源]`；小节标题或行内的 `到期 YYYY-MM-DD`（过期整节失效 → WARNING）与 `复核 YYYY-MM`（已过 → WARNING）机器会读；文末 `## 已退役`。
+```
+in a terminal:  plug apply proposals/pending/<file>.md
+                plug apply proposals/pending/<file>.md --reject "reason"
+from the chat:  ! plug apply proposals/pending/<file>.md --owner
+                ! plug apply proposals/pending/<file>.md --reject "reason" --owner
+look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
+```
 
-## 资料 material（`tools/<t>/materials/*.md`）
+## The rule file self/RULES.md (not a shape — one file)
 
-`date`（必填，YYYY-MM-DD）· `kind`（保质期按 kind 查 plug.yaml 的 `ttl_days`）· `title` · `source` 可选。过期 = WARNING，用时报日期。
+Header `model: … reviewed: YYYY-MM-DD`; `## section` = a tier; every line `- R12 · statement [YYYY-MM · source]`.
+`到期 YYYY-MM-DD` in a section title (expired = the whole section is void → WARNING) and `复核 YYYY-MM` (past →
+WARNING) are read by the machine. The file ends with `## 已退役`.
 
-## 索引专用（不写文件）
+## Material (`tools/<t>/materials/*.md`)
 
-- **doc**：从教材文件推出——`id`（frontmatter id → 头部 `BVID:` / `ID:` → 文件名）· `title` · `date` · `kind` · `speaker` · `series`（标题第一个分隔符前的原样前缀）。三种文件：frontmatter 文本；讲座（`Title / BVID / Date` 头 + `==== 纯文本 ====`，只索引这一段）；清洗稿（6 行头 + `====` + `[m:ss]` / `[¶n]` 段落）。
-- **chunk**：所属 doc · 序号（段落号；单段文档为窗口号）· 行号范围 · 位置（时间戳）。
+`date` (required, YYYY-MM-DD) · `kind` (shelf life is looked up by kind in plug.yaml's `ttl_days`) · `title` ·
+`source` optional. Expired is a WARNING, and the date must be stated when the material is used.
+
+## Manual (`tools/<t>/SKILL.md`) and the equipment template
+
+`name` · `description` required; `when_to_use` · `disable-model-invocation` · `user-invocable` optional.
+`disable-model-invocation: true` marks sensitive equipment: the model never reaches for it on its own, and the
+flag is passed through to Codex's `agents/openai.yaml` as `allow_implicit_invocation: false`.
+
+Every manual opens with three lines:
+
+```
+Where: anywhere (default: back home, in the content repo)
+Needs Base: yes / no
+Product copies: none by default — products go to `work/<equipment>/`
+```
+
+Five invariants hold for all equipment: products go to `work/`; a record holds a judgment only; development
+happens in `workshop/`; registering an equipment in plug.yaml is what makes it protected; the user-level skill
+copy is a manual trigger (`plug init --link-skills`).
+
+Building new equipment: build it in `workshop/<name>/` → write the three header lines → move it to
+`tools/<name>/` and register it in plug.yaml.
+
+A manual may feed evidence, draw boundaries and fix the output format. It may not carry a situation routing
+table or a pre-decided conclusion, and it says outright that the Base and the corpus are *one* source of
+evidence, not the only one: the agent's own knowledge stays in play, and where the two conflict both are shown
+with their sources. "Leave the Base out of this one" returns the bare model at any moment. Whether a manual
+helps at all is testable — run the same situations with and without the equipment; if with is worse, the manual
+is wrong.
+
+## The free zones
+
+`work/<equipment>/` (products) and `workshop/<equipment>/` (building new equipment) are never walked, never
+indexed, and never protected — and neither is anything under `tools/` that no registered equipment claims.
+Deny rules and pre-commit only ever cover `self/` and the equipment registered in plug.yaml.
+
+## Index-only (nothing is written)
+
+- **doc**: derived from a corpus file — `id` (frontmatter id → header `BVID:` / `ID:` → filename) · `title` ·
+  `date` · `kind` · `speaker` · `series` (the prefix before the first separator in the title, verbatim).
+  Three file forms: frontmatter text; a lecture (`Title / BVID / Date` header + `==== 纯文本 ====`, only that
+  section is indexed); a cleaned transcript (6-line header + `====` + `[m:ss]` / `[¶n]` paragraphs).
+- **chunk**: its doc · sequence number (paragraph number; window number for a single-paragraph doc) · line range
+  · position (timestamp).
 
 ## plug.yaml
 
-`machine`（钉机器版本）· `shape_version` · `self` · `proposals` · `index` · `index_md` · `numbers` · `hooks` · `pin` · `language` · `tools[{name, path, depends, ttl_days, unreviewed}]` · `pilots{name: {skills}}` · `outbound[{tool, match, reason}]` · `protected` / `unprotected`。内容仓库里唯一允许出现路径的地方。
+`machine` (pins the machine version) · `shape_version` · `self` · `proposals` · `index` · `index_md` · `numbers`
+· `hooks` · `pin` · `language` · `tools[{name, path, depends, ttl_days, unreviewed}]` ·
+`pilots{name: {skills, user_skills}}` · `outbound[{tool, match, reason}]` · `protected` / `unprotected` ·
+`protect` · `exclude` · `corpus[{path, tool, sub}]`. The only place in a content repo where a path may appear.
+
+`exclude:` is a list of globs that `walk()` skips, so those files never reach the index, the check-up or the
+human-readable index. It is a **visibility** switch and nothing else: an excluded file is exactly as protected as
+it was, and pre-commit still refuses it. Use it for content the owner does not want retrievable — a private
+fact sheet, a working directory sitting inside an area the machine would otherwise walk.
+
+`protect:` is a list of extra globs the berserk lock covers, on top of `protected`. **Both layers read it**:
+`plug init` turns each entry into a deny rule and `config.is_protected` hands it to pre-commit, so a path the
+owner declares protected is protected in both layers or in neither — protection is never one-layered. It cannot
+override the two hard exemptions: the free zones `work/` and `workshop/`, and anything under `tools/` that no
+registered equipment claims. Use it for a directory an equipment carries that shape v1 does not name — a kit of
+source documents, say.
+
+`corpus:` mounts corpus directories that do not sit under `tools/<equipment>/corpus/`, so a content repo may keep
+one shared corpus at its root:
+
+```yaml
+corpus:
+  - {path: corpus/clean, tool: analysis, sub: clean}   # sub: clean | raw, exactly as under an equipment
+```
+
+`tool` only labels the rows (which equipment the material belongs to); `sub: clean` wins over `sub: raw` for the
+same doc id, the same rule as inside an equipment. A declared directory that does not exist is a WARNING
+(`corpus_path`), not a silent skip. Everything a corpus costs is paid per file at index time, so mount the
+material you actually search, not everything you own.

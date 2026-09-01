@@ -1,4 +1,6 @@
-# 放在 <内容仓库>/.agents/skills/<装备>/agents/openai.yaml（plug index 镜像说明书时会自动写一份，已存在则不动）。
-# Codex 的隐式调用开关不在 SKILL.md frontmatter 里，在这里。
+# Goes at <content-repo>/.agents/skills/<equipment>/agents/openai.yaml. `plug index` writes one while mirroring
+# the manuals, and rewrites it only when the switch disagrees with the manual's frontmatter.
+# Codex's implicit-invocation switch does not live in SKILL.md frontmatter, it lives here. Sensitive equipment
+# marked `disable-model-invocation: true` in the manual gets allow_implicit_invocation: false instead.
 policy:
   allow_implicit_invocation: true

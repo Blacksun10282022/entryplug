@@ -1,13 +1,17 @@
-# 做什么：形状 v1 的字段表与逐文件校验——内容条目 entry（词典 / 打法）· 记录 record（驾驶日志）· 提议 proposal（改装申请）
-#         · 资料 material · 说明书 manual · 规则文件 RULES.md · 教材 doc；外加观察行 / 规则行 / [[链接]] / 小节的解析。
-# 输入：一个文件的文本（frontmatter + 正文）和它的区域名（config.walk 给的 area）。
-# 输出：结构化 dict（fm · body · errors · obs · links · sections）；parse_rules / parse_doc 给出规则与教材的结构。
-# 不做什么：不跨文件（[[链接]] 解析、锚句核对、R-id 存在性在 check）；不读教材目录；不写任何文件。
-# 谁调用：index（校验 + 摘要字段）· check（清单）· apply（提议解析）· numbers（记录字段）。
-# 观察行语法：`- [?]? 陈述 [[链接]]* ^pNNNN (src: doc-id#seq "锚句")`；综合行 `(src: ^p1 ^p2)`；无原句 `(src: doc p.12 [未锚])`。
-# 规则行语法：`- R12 · 陈述 [YYYY-MM · 来源]`；小节标题或行内的 `到期 YYYY-MM-DD` / `复核 YYYY-MM` 机器会读。
-# 形状只加可选字段不改必填字段（§6.6）；三种形状的未知键是 ERROR，其余形状宽松。
-# 依赖：stdlib + PyYAML。
+# What: shape v1 — the field table and per-file validation for entry (dict / playbook) · record (flight log) ·
+#       proposal (refit request) · material · manual · the RULES.md rule file · corpus doc; plus parsing of
+#       observation lines, rule lines, [[links]] and ## sections.
+# In:   one file's text (frontmatter + body) and its area name (from config.walk).
+# Out:  a structured dict (fm · body · errors · obs · links · sections); parse_rules / parse_doc for rules and corpus.
+# Not:  never crosses files ([[link]] resolution, anchor-sentence checks and R-id existence live in check);
+#       never reads the corpus directory; never writes anything.
+# Who:  index (validation + summary fields) · check (findings) · apply (proposal parsing) · numbers (record fields).
+# Note: section headings and markers below are shape v1 on-disk vocabulary, not prose — they stay as written.
+#       Observation line: `- [?]? statement [[link]]* ^pNNNN (src: doc-id#seq "anchor sentence")`;
+#       synthesis line `(src: ^p1 ^p2)`; no original sentence `(src: doc p.12 [未锚])`.
+#       Rule line: `- R12 · statement [YYYY-MM · source]`; `到期 YYYY-MM-DD` / `复核 YYYY-MM` are read by the machine.
+#       Shape v1 only gains optional fields (§6.6); unknown keys are an ERROR in the three strict shapes.
+# Deps: stdlib + PyYAML.
 import re
 import yaml
 
@@ -25,7 +29,8 @@ AREA_SHAPE = {"dict": "entry", "playbook": "entry", "record": "record", "proposa
 RE_SRC = re.compile(r"\(src:\s*(.*?)\)\s*$")
 RE_ANCHOR = re.compile(r"\^p\d+")
 RE_LINK = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
-RE_RULE = re.compile(r"^\s*[-*]\s*([A-Z]{1,2}\d{1,3})\s*[·・:：]\s*(.*)$")
+RULE_ID = r"[A-Z]{1,2}\d{1,3}[a-z]?"        # B1 · J12 · P2a — a lowercase suffix is part of the id
+RE_RULE = re.compile(r"^\s*[-*]\s*(%s)\s*[·・:：]\s*(.*)$" % RULE_ID)
 RE_DATE = re.compile(r"\d{4}-\d{2}(?:-\d{2})?")
 RE_HEAD = re.compile(r"^(?:[A-Za-z_]+|标题|来源|日期|主讲)\s*[:：]\s*(.*)$")
 SEP = re.compile(r"^={3,}(?:\s*(.*?)\s*={3,})?\s*$")
@@ -34,23 +39,23 @@ HEAD_KEYS = {"标题": "title", "日期": "date", "bvid": "id", "主讲": "speak
 
 
 def split_frontmatter(text):
-    """--- yaml --- 正文。返回 (fm|None, body, error|None)。fm 必须是映射。"""
+    """--- yaml --- body. Returns (fm|None, body, error|None). fm must be a mapping."""
     if not text.startswith("---"):
         return None, text, None
     m = re.match(r"---\s*\n(.*?)\n---\s*\n?", text, re.S)
     if not m:
-        return None, text, "frontmatter 没有闭合的 ---"
+        return None, text, "frontmatter has no closing ---"
     try:
         fm = yaml.safe_load(m.group(1)) or {}
     except yaml.YAMLError as e:
-        return None, text[m.end():], "frontmatter 不是合法 YAML：" + str(e).splitlines()[0]
+        return None, text[m.end():], "frontmatter is not valid YAML: " + str(e).splitlines()[0]
     if not isinstance(fm, dict):
-        return None, text[m.end():], "frontmatter 不是映射"
+        return None, text[m.end():], "frontmatter is not a mapping"
     return fm, text[m.end():], None
 
 
 def sections(body):
-    """## 小节 → 文本（保留顺序）。'' 键是首个小节前的正文。"""
+    """## heading → text, in order. The '' key holds whatever precedes the first heading."""
     out, cur, fence = {"": []}, "", False
     for line in body.splitlines():
         fence ^= line.startswith("```")
@@ -68,7 +73,7 @@ def links(body):
 
 
 def parse_observations(body):
-    """## 观察 下的 `- ` 行。每条：text · unreviewed · anchor · src · refs · doc · seq · quote · unanchored · missing_src。"""
+    """`- ` lines under `## 观察`. Each: text · unreviewed · anchor · src · refs · doc · seq · quote · unanchored · missing_src."""
     out, in_obs = [], False
     for n, line in enumerate(body.splitlines(), 1):
         if line.startswith("## "):
@@ -102,36 +107,36 @@ def parse_observations(body):
 
 
 def validate(shape, fm, body):
-    """按字段表校验一个文件，返回 ERROR 文案列表（空 = 合形状）。"""
+    """Validate one file against the field table; returns a list of ERROR texts (empty = in shape)."""
     spec = SHAPES.get(shape)
     if spec is None:
         return []
     if fm is None:
-        return ["缺 frontmatter"]
-    errs = ["缺必填字段 " + k for k in spec["required"] if fm.get(k) in (None, "", [])]
+        return ["no frontmatter"]
+    errs = ["missing required field " + k for k in spec["required"] if fm.get(k) in (None, "", [])]
     if shape in ("entry", "record", "proposal"):
         allowed = set(spec["required"]) | set(spec["optional"])
-        errs += ["未知字段 %s（形状 v1 不认识）" % k for k in fm if k not in allowed]
+        errs += ["unknown field %s (shape v1 does not know it)" % k for k in fm if k not in allowed]
     if shape == "entry":
         kind = fm.get("kind")
         if kind not in spec["kinds"]:
-            errs.append("kind 必须是 %s，现在是 %r" % ("/".join(spec["kinds"]), kind))
+            errs.append("kind must be one of %s, got %r" % ("/".join(spec["kinds"]), kind))
         if kind == "concept" and not fm.get("aliases"):
-            errs.append("concept 至少一个 alias")
+            errs.append("a concept needs at least one alias")
         if kind == "playbook":
-            errs += ["playbook 缺 " + k for k in spec["playbook"] if not fm.get(k)]
+            errs += ["playbook is missing " + k for k in spec["playbook"] if not fm.get(k)]
         if "aliases" in fm and not isinstance(fm["aliases"], list):
-            errs.append("aliases 必须是列表")
+            errs.append("aliases must be a list")
     if "headings" in spec:
         have = sections(body)
-        errs += ["正文缺小节 ## " + h for h in spec["headings"] if h not in have]
+        errs += ["body is missing section ## " + h for h in spec["headings"] if h not in have]
     if shape == "material" and fm.get("date") is not None and not RE_DATE.match(str(fm["date"])):
-        errs.append("date 必须是 YYYY-MM-DD")
+        errs.append("date must be YYYY-MM-DD")
     return errs
 
 
 def parse_file(text, area):
-    """一次把文件读成结构：shape · fm · body · errors · sections · links · obs。"""
+    """Read a file into one structure: shape · fm · body · errors · sections · links · obs."""
     shape = AREA_SHAPE.get(area)
     fm, body, err = split_frontmatter(text)
     errors = [err] if err else []
@@ -141,8 +146,19 @@ def parse_file(text, area):
             "links": links(body), "obs": parse_observations(body) if shape == "entry" else []}
 
 
+def rule_refs(text, ids):
+    """Rule ids named in text, restricted to the prefixes that actually occur in RULES.md. One definition, used by
+    check (does the id exist?) and numbers (is the reference real?), so the two can never drift apart. The
+    lowercase suffix is part of the id: without it P2a matched nothing at all — the reference was not misjudged,
+    it was invisible, because the trailing letter broke the word-boundary lookahead."""
+    if not ids:
+        return []
+    pre = "|".join(sorted({re.match(r"[A-Z]+", i).group(0) for i in ids}))
+    return re.findall(r"(?<![A-Za-z0-9])((?:%s)\d{1,3}[a-z]?)(?![A-Za-z0-9])" % pre, text)
+
+
 def parse_rules(text):
-    """RULES.md → header{model, reviewed} · sections[{name, expires, review, lines[{id, text, dated, review}]}] · ids。"""
+    """RULES.md → header{model, reviewed} · sections[{name, expires, review, lines[{id, text, dated, review}]}] · ids."""
     header, secs, cur = {}, [], None
     for line in text.splitlines():
         if not line.startswith("#"):
@@ -166,8 +182,9 @@ def parse_rules(text):
 
 
 def parse_doc(text, path, sub=None):
-    """教材文件 → doc：id · title · date · kind · speaker · series · units[(lstart, lend, pos, text)] · text。
-    三种来源：frontmatter 文本；讲座（头部 Title/BVID/Date + ==== 纯文本 ====，只取纯文本段）；清洗稿（6 行头 + ==== + [m:ss]/[¶n] 段落）。"""
+    """Corpus file → doc: id · title · date · kind · speaker · series · units[(lstart, lend, pos, text)] · text.
+    Three sources: frontmatter text; a lecture (Title/BVID/Date header + ==== plain text ====, only that section);
+    a cleaned transcript (6-line header + ==== + [m:ss] / [¶n] paragraphs)."""
     fm, body, _ = split_frontmatter(text)
     lines = text.splitlines()
     meta, units = {}, []

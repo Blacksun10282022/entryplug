@@ -1,13 +1,14 @@
-# 做什么：找到内容仓库的 plug.yaml，解析成一个普通 dict，把相对路径落成绝对路径，列出内容文件。
-# 输入：--root 参数 / 环境变量 PLUG_ROOT / 从当前目录向上找 plug.yaml。
-# 输出：cfg dict（root · self · records · proposals · index · tools[] · outbound · pilots · protected …）；
-#       walk(cfg) 给出每个内容文件的 {path, rel, area, tool, sub}。
-# 不做什么：不校验内容（那是 check 的事）；不读任何内容文件的正文；不写文件。
-# 谁调用：所有动词与三道闸门。
-# 约定：plug.yaml 是内容仓库里唯一允许出现路径的地方；机器永远不知道内容仓库在哪，只认 root。
-# 区域名（area）：rules · facts · style · record · manual · reading · playbook · dict · material · corpus · checks · proposal · numbers。
-# 形状版本与机器版本钉在 entryplug/__init__.py；plug.yaml 里 `machine: entryplug 0.1.0` / `shape_version: 1` 引用它们。
-# 依赖：stdlib + PyYAML。
+# What: find the content repo's plug.yaml, parse it into a plain dict, resolve relative paths, list content files.
+# In:   --root argument / PLUG_ROOT env var / walk up from the current directory looking for plug.yaml.
+# Out:  cfg dict (root · self · records · proposals · index · tools[] · outbound · pilots · protected …);
+#       walk(cfg) yields {path, rel, area, tool, sub} for every content file.
+# Not:  never validates content (that is check's job); never reads the body of a content file; never writes.
+# Who:  every verb and all four gates.
+# Rule: plug.yaml is the only place in a content repo where paths may appear; the machine never knows where the
+#       content repo is, it only knows root. Areas: rules · facts · style · record · manual · reading · playbook ·
+#       dict · material · corpus · checks · proposal · numbers. work/ and workshop/ are unprotected, unindexed
+#       zones. `corpus:` declares corpus outside an equipment; `protect:` adds to the berserk lock, both layers.
+# Deps: stdlib + PyYAML. Shape version and machine version are pinned in entryplug/__init__.py.
 import os, fnmatch
 from pathlib import Path
 import yaml
@@ -17,14 +18,18 @@ DEFAULTS = {
     "self": "self", "proposals": "proposals", "index": ".kb/index.sqlite",
     "index_md": "index.md", "numbers": "self/数字.md", "hooks": ".kb/hooks", "pin": ".kb/pin.md",
     "language": "中文", "pilots": {"claude-code": {"skills": ".claude/skills"}, "codex": {"skills": ".agents/skills"}},
-    "protected": ["self/RULES.md", "self/facts/**", "tools/**"], "unprotected": ["**/corpus/**"],
-    "outbound": [], "tools": [],
+    "protected": ["self/RULES.md", "self/facts/**", "tools/**"],
+    "unprotected": ["**/corpus/**", "work/**", "workshop/**"],
+    "outbound": [], "tools": [], "exclude": [], "protect": [], "corpus": [],
 }
 PROPOSAL_DIRS = ("pending", "rejected", "applied", "tools")
+FREE_ZONES = ("work", "workshop")          # products / development: never protected, never indexed
+USER_SKILLS = {"claude-code": "~/.claude/skills", "codex": "~/.agents/skills"}
+PLUG_OFF = ".plug-off"
 
 
 def find_root(start=None):
-    """PLUG_ROOT 优先；否则从 start（默认 cwd）向上找 plug.yaml。找不到抛 FileNotFoundError。"""
+    """PLUG_ROOT wins; otherwise walk up from start (default cwd) looking for plug.yaml. Raises FileNotFoundError."""
     env = os.environ.get("PLUG_ROOT")
     if env and (Path(env) / "plug.yaml").exists():
         return Path(env).resolve()
@@ -32,11 +37,11 @@ def find_root(start=None):
     for d in (p, *p.parents):
         if (d / "plug.yaml").exists():
             return d
-    raise FileNotFoundError("找不到 plug.yaml（用 --root 指定内容仓库，或设 PLUG_ROOT）")
+    raise FileNotFoundError("no plug.yaml found (pass --root <content repo>, or set PLUG_ROOT)")
 
 
 def load(root=None):
-    """读 plug.yaml → cfg。相对路径全部相对 root；tools 每项补齐 name/path/depends/ttl_days。"""
+    """Read plug.yaml → cfg. Relative paths resolve against root; each tool gets name/path/depends/ttl_days."""
     root = Path(root).resolve() if root else find_root()
     raw = yaml.safe_load((root / "plug.yaml").read_text(encoding="utf-8")) or {}
     cfg = dict(DEFAULTS)
@@ -65,27 +70,63 @@ def load(root=None):
 
 
 def version_ok(cfg):
-    """形状版本机器认不认识；机器版本钉住的是不是当前装的。返回 (shape_ok, machine_ok)。"""
+    """Does the machine know this shape version, and is the pinned machine version the one installed?"""
     shape_ok = cfg.get("shape_version") == SHAPE_VERSION
     pin = cfg.get("machine_pin", "")
     machine_ok = (not pin) or pin.split()[-1] == __version__
     return shape_ok, machine_ok
 
 
+def plug_off(cfg):
+    """True when <root>/.plug-off exists: the sortie lock, the compaction pin and the record reminder all pass
+    through (no Base lookups, no record nagging). Deny rules and pre-commit are NOT affected."""
+    return (cfg["root"] / PLUG_OFF).exists()
+
+
 def rel(cfg, path):
     return Path(path).resolve().relative_to(cfg["root"]).as_posix()
 
 
+def tool_dirs(cfg):
+    """Registered equipment directories, relative to root. Anything under tools/ that is not one of these is
+    unregistered (workshop-grade) and therefore not protected."""
+    return [str(t["path"]).strip("/").replace("\\", "/") for t in cfg["tools"]]
+
+
+def matches(patterns, relpath):
+    """Glob match against a relative posix path; ** counts as any depth (fnmatch does not know it)."""
+    rp = str(relpath).replace("\\", "/").lstrip("./")
+    for pat in patterns or []:
+        if fnmatch.fnmatch(rp, pat) or fnmatch.fnmatch(rp, pat.replace("**/", "")):
+            return True
+        if pat.endswith("/**") and rp.startswith(pat[:-3] + "/"):
+            return True
+    return False
+
+
+def excluded(cfg, relpath):
+    """plug.yaml `exclude:` — files walk() must not enumerate, so they never reach the index or the check-up.
+    It is a visibility switch only: it does NOT unprotect anything (is_protected is consulted separately), and
+    pre-commit still refuses a protected path whether or not it is excluded here."""
+    return matches(cfg.get("exclude"), relpath)
+
+
+def protect_patterns(cfg):
+    """Everything the berserk lock covers: the `protected` list plus the extra `protect` list. One list, and both
+    layers read it — plug init turns it into deny rules and pre-commit refuses it. Protection is never one-layered."""
+    return list(cfg["protected"]) + list(cfg.get("protect") or [])
+
+
 def is_protected(cfg, relpath):
-    """受保护路径（暴走封锁）：protected 匹配且 unprotected 不匹配。glob 用 fnmatch，** 视作任意深度。"""
-    def hit(patterns):
-        for pat in patterns:
-            if fnmatch.fnmatch(relpath, pat) or fnmatch.fnmatch(relpath, pat.replace("**/", "")):
-                return True
-            if pat.endswith("/**") and relpath.startswith(pat[:-3] + "/"):
-                return True
+    """Protected (berserk lock): matches protect_patterns and not unprotected. ** means any depth (fnmatch).
+    Two hard exemptions come first and `protect:` cannot override them: the free zones work/ and workshop/, and
+    anything under tools/ that belongs to no equipment registered in plug.yaml."""
+    rp = str(relpath).replace("\\", "/").lstrip("./")
+    if rp.split("/")[0] in FREE_ZONES:
         return False
-    return hit(cfg["protected"]) and not hit(cfg["unprotected"])
+    if rp.startswith("tools/") and not any(rp == d or rp.startswith(d + "/") for d in tool_dirs(cfg)):
+        return False
+    return matches(protect_patterns(cfg), rp) and not matches(cfg["unprotected"], rp)
 
 
 def _md_files(d):
@@ -93,10 +134,15 @@ def _md_files(d):
 
 
 def walk(cfg):
-    """列出所有内容文件。每项：path · rel · area · tool · sub。教材含 .md/.txt；其余只认 .md。"""
+    """Every content file: path · rel · area · tool · sub. Corpus takes .md/.txt, everything else .md only.
+    work/ and workshop/ are never walked — products and drafts do not enter the index. Anything matching
+    plug.yaml `exclude:` is skipped here too (a visibility switch, never a protection one)."""
     out, root, s = [], cfg["root"], cfg["self_dir"]
     def add(path, area, tool=None, sub=None):
-        out.append({"path": path, "rel": path.relative_to(root).as_posix(), "area": area, "tool": tool, "sub": sub})
+        rel = path.relative_to(root).as_posix()
+        if excluded(cfg, rel):
+            return
+        out.append({"path": path, "rel": rel, "area": area, "tool": tool, "sub": sub})
     if (s / "RULES.md").exists():
         add(s / "RULES.md", "rules")
     if (s / "style.md").exists():
@@ -126,6 +172,12 @@ def walk(cfg):
                         add(p, "corpus", n, sub)
         for p in sorted((d / "checks").glob("*.py")) if (d / "checks").is_dir() else []:
             add(p, "checks", n)
+    for c in cfg["corpus"]:                     # corpus declared at any path (it need not sit under an equipment)
+        cd = root / str(c["path"])
+        if cd.is_dir():
+            for p in sorted(cd.rglob("*")):
+                if p.is_file() and p.suffix.lower() in (".md", ".txt"):
+                    add(p, "corpus", c.get("tool"), c.get("sub", "clean"))
     for sub in PROPOSAL_DIRS:
         pd = cfg["proposals_dir"] / sub
         if pd.is_dir():

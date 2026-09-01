@@ -1,4 +1,5 @@
-# 动词 check：示例装备 0 ERROR；每种 ERROR 在临时副本里故意坏一次；主要 WARNING；提议过期搬家；头部自检；同步率的盲判核对。
+# Verb check: 0 ERROR on the example equipment; every kind of ERROR broken once in a temporary copy; the main
+# WARNINGs; expired proposals moving house; the header self-check; the blind-valid arithmetic on the numbers page.
 from datetime import date
 from entryplug import check, index, report
 from conftest import git, plug
@@ -28,9 +29,12 @@ def test_example_has_zero_errors_and_known_warnings(repo):
     assert {"outcome", "expired", "hook"} <= set(codes(r, "warnings"))
     assert all(f["at"] for f in r["warnings"])
     assert r["header"]["shape_ok"] and r["header"]["tools"] == ["sunzi"] and not r["header"]["index_stale"]
-    assert repo["numbers_path"].exists() and "同步率" in r["numbers"] and "总分" in r["numbers"]
+    assert repo["numbers_path"].exists() and "Sync rate" in r["numbers"] and "never a total" in r["numbers"]
     text = report.report(repo, r)
-    assert "ERROR 0" in text and "待批提议 1" in text and "过期资料 1" in text and "本周记录" in text
+    assert "ERROR 0" in text and "pending proposals 1" in text and "expired materials 1" in text and "records this week" in text
+    assert "in a terminal:  plug apply proposals/pending/2026-08-26-shi-alias.md" in text
+    assert "! plug apply proposals/pending/2026-08-26-shi-alias.md --owner" in text
+    assert '--reject "reason" --owner' in text and "--dry-run" in text
 
 
 def test_error_shape(repo):
@@ -100,8 +104,8 @@ def test_warnings_batch(repo):
     edit(root, "tools/sunzi/dict/fan-jian.md", "aliases: [用间, 五间, 反间计, double agent, fanjian]", "aliases: [用间]")
     edit(root, "tools/sunzi/dict/xing.md", "aliases: [军形, 形势, 不可胜, disposition, xing]", "aliases: [军形, 势, disposition]")
     edit(root, "tools/sunzi/playbooks/opponent-feigns-weakness.md", "## 动作\n", "## 动作\n- 让对方先报价。\n")
-    edit(root, "tools/sunzi/SKILL.md", "## 学（只在主人点名时）", "见 tools/sunzi/dict/nope.md 与 `plug fly`。\n## 学（只在主人点名时）")
-    edit(root, "tools/sunzi/SKILL.md", "description: 用《孙子兵法》", "description: " + "长" * 1600 + "用《孙子兵法》")
+    edit(root, "tools/sunzi/SKILL.md", "## Learning (only when the owner asks)", "见 tools/sunzi/dict/nope.md 与 `plug fly`。\n## Learning (only when the owner asks)")
+    edit(root, "tools/sunzi/SKILL.md", "description: Use Sunzi", "description: " + "长" * 1600 + "Use Sunzi")
     edit(root, "tools/sunzi/dict/shi.md", "- [?] 治乱归于数", "- 治乱归于数")
     (root / "proposals/pending/2026-08-27-dup.md").write_text((root / "proposals/pending/2026-08-26-shi-alias.md").read_text(encoding="utf-8"), encoding="utf-8")
     w = set(codes(run(repo), "warnings"))
@@ -131,7 +135,7 @@ def test_hook_stamps_in_header(repo):
     (repo["hooks_dir"] / "precommit").write_text("2026-01-01T10:00:00", encoding="utf-8")
     r = run(repo)
     hooks = {f["file"].split("/")[-1] for f in r["warnings"] if f["code"] == "hook"}
-    assert hooks == {"precommit", "precompact"} and r["header"]["hooks"]["outbound"].startswith("2026-08-28")
+    assert hooks == {"precommit", "precompact", "stop"} and r["header"]["hooks"]["outbound"].startswith("2026-08-28")
 
 
 def test_numbers_blind_check_uses_git_history(git_repo):
@@ -145,6 +149,6 @@ def test_numbers_blind_check_uses_git_history(git_repo):
     git(root, "add", "-A"), git(root, "commit", "-q", "-m", "chosen")
     r = run(git_repo)
     page = r["numbers"]
-    assert "| 同意率（盲判有效） | 1/1" in page and "非盲 3 已剔" in page
-    assert "| 规则引用真实率 | 6/6 |" in page and "| 引文可核率 | 6/6 |" in page
-    assert "说不清 1" in page and "未答 1" in page
+    assert "| agreement rate (blind-valid) | 1/1" in page and "(3 non-blind excluded)" in page
+    assert "| rule references real | 6/6 |" in page and "| quotes verifiable | 6/6 |" in page
+    assert "unclear 1" in page and "unanswered 1" in page
