@@ -95,7 +95,7 @@ def tool_dirs(cfg):
 
 def matches(patterns, relpath):
     """Glob match against a relative posix path; ** counts as any depth (fnmatch does not know it)."""
-    rp = str(relpath).replace("\\", "/").lstrip("./")
+    rp = str(relpath).replace("\\", "/").removeprefix("./")   # not lstrip("./") — that eats a dot-path's dot
     for pat in patterns or []:
         if fnmatch.fnmatch(rp, pat) or fnmatch.fnmatch(rp, pat.replace("**/", "")):
             return True
@@ -121,7 +121,10 @@ def is_protected(cfg, relpath):
     """Protected (berserk lock): matches protect_patterns and not unprotected. ** means any depth (fnmatch).
     Two hard exemptions come first and `protect:` cannot override them: the free zones work/ and workshop/, and
     anything under tools/ that belongs to no equipment registered in plug.yaml."""
-    rp = str(relpath).replace("\\", "/").lstrip("./")
+    # removeprefix, not lstrip("./"): lstrip takes a SET of characters, so it ate the leading dot of every
+    # dotted path — `.claude/settings.json` arrived here as `claude/settings.json` and could never match a
+    # pattern that kept the dot. Any dot-path (.claude/, .codex/, .github/, .env) was silently unprotectable.
+    rp = str(relpath).replace("\\", "/").removeprefix("./")
     if rp.split("/")[0] in FREE_ZONES:
         return False
     if rp.startswith("tools/") and not any(rp == d or rp.startswith(d + "/") for d in tool_dirs(cfg)):

@@ -69,6 +69,26 @@ def test_deny_rules_cover_self_and_registered_equipment_only(git_repo):
     assert not any("/work/" in r or "/workshop/" in r or "tools/**" in r for r in rules), rules
     for rel in ("work/sunzi/brief.md", "workshop/newtool/SKILL.md", "tools/unregistered/dict/x.md"):
         assert not config.is_protected(git_repo, rel), rel
+
+
+def test_a_dot_path_can_be_protected(git_repo):
+    """The files that define the locks are dot-paths. New in this build — `is_protected` normalised with
+    lstrip("./"), which takes a SET of characters, so it ate the leading dot: `.claude/settings.json` arrived as
+    `claude/settings.json` and could never match a pattern that kept the dot. Every dot-path (.claude/, .codex/,
+    .github/, .env) was silently unprotectable — plug.yaml could list it and pre-commit would still let it through."""
+    from entryplug import config, init as I
+    root = git_repo["root"]
+    y = root / "plug.yaml"
+    # `protect:` is the key both layers read (init.deny_rules and config.is_protected), so it is the one that
+    # keeps them covering the same set — see deny_rules' docstring.
+    y.write_text(y.read_text(encoding="utf-8")
+                 + "\nprotect:\n  - \".claude/settings.json\"\n  - \".codex/**\"\n", encoding="utf-8")
+    cfg = config.load(root)
+    assert config.is_protected(cfg, ".claude/settings.json")
+    assert config.is_protected(cfg, ".codex/hooks.json")
+    assert config.is_protected(cfg, "./.claude/settings.json"), "a leading ./ must still be stripped"
+    assert not config.is_protected(cfg, ".github/workflows/ci.yml"), "only what protect: lists"
+    assert any(r.endswith("/.claude/settings.json)") for r in I.deny_rules(cfg)), "deny must cover the same set"
     assert config.is_protected(git_repo, "tools/sunzi/dict/shi.md")
     r = plug(git_repo["root"], "init", "--pilot", "claude-code")
     deny = json.loads((git_repo["root"] / ".claude/settings.json").read_text(encoding="utf-8"))["permissions"]["deny"]
