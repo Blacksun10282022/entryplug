@@ -38,6 +38,23 @@ Machine itself: 2026-09-01 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5
 - The whole public repo now speaks English: comments, docstrings, CLI help and error text, README, STATUS, docs,
   CLAUDE.md. Content stays in its own language, and shape v1's on-disk vocabulary does not move (D42).
 
+- Field note on the D20 mount point: the first equipment check to run for real caught two genuine pilot errors
+  on its first outing — a half-width colon inside YAML frontmatter, and a heading level that made a required
+  section read as empty. Evidence that the contract (no args, one WARNING per stdout line, exit 0/2) is worth
+  having. It also produced one false finding, by auditing the newest record regardless of which equipment owns
+  it; a proposal narrowing it to `tool: <this equipment>` is pending. A check that cries wolf gets ignored
+  within a fortnight, so scoping matters more than coverage here.
+- A deployed map does not update when its template does (D55): `plug init` writes the maps only when absent, so
+  unit-01 kept the pre-D53 sortie-lock claim after the template was corrected. Fixed in place, and `plug check`
+  now raises `map_claim` if a deployed AGENTS.md still asserts a lock Codex has not got.
+- Codex hooks work at all now (D53): every one of them had reported `Failed` since install, because Codex takes
+  `command` as one whitespace-split string and we were emitting Claude's quoted form. Fixed in `plug init`.
+- The sortie lock blocks on **both** pilots (D56). One decision — `permissionDecision: "deny"` with a non-empty
+  reason — and two exit codes: Claude Code needs exit 2, Codex needs exit 0 (a non-zero exit makes it ignore the
+  hook's stdout entirely). Verified live: zero command executions and the agent reporting it was stopped.
+  This retracts the earlier "Codex records but cannot block" conclusion; see D57 for why that conclusion was
+  reached from three sound experiments, and what to do instead of black-box probing.
+- Every `--emit` path exits 0 even if the panel itself throws (D54).
 - `plug check --contact` no longer reports a false "integration is broken" for a content repo whose equipment
   carries no dictionary: the MCP probe falls back to the index, and with nothing to probe with the hit count is
   not asserted (D50). Found by the first real acceptance run.

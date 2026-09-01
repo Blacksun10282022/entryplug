@@ -3,7 +3,9 @@
 #       (a tool regex + an optional match regex over the tool input); a hit prints one line of reason on stderr,
 #       stamps .kb/hooks/outbound and exits 2 (blocked, the pilot sees the reason). No hit exits 0.
 # In:   the hook JSON on stdin; PLUG_ROOT, or walk up from cwd looking for plug.yaml.
-# Out:  exit code 0 / 2; one line of reason.
+# Out:  a deny decision both pilots honour — `hookSpecificOutput.permissionDecision: "deny"` with a non-empty
+#       `permissionDecisionReason` on stdout — plus the exit code each one needs: Claude Code blocks on exit 2
+#       (with the reason on stderr), Codex blocks on the JSON but only from a process that exits 0 (D56).
 # Not:  never rewrites the tool input (updatedInput is forbidden outright); never reads content; a missing
 #       plug.yaml or broken JSON passes through (hooks are fail-open by design; the second layer is simply not
 #       giving the pilot tools that can reach outward).
@@ -21,8 +23,16 @@ from entryplug import config  # noqa: E402
 
 
 def match(rules, tool_name, tool_input):
-    """Return the explanation of the first matching rule, or None."""
-    blob = tool_input if isinstance(tool_input, str) else json.dumps(tool_input, ensure_ascii=False)
+    """Return the explanation of the first matching rule, or None. A shell tool's input carries the command next to
+    prose the model wrote about it (Bash: command · description · timeout), and only the command ever runs — so when
+    there is a `command` string, that is what a rule matches. Talking about curl is not using curl. Anything else
+    (a plain string, or a payload shaped differently) still matches on the whole JSON, so nothing stops being seen."""
+    if isinstance(tool_input, str):
+        blob = tool_input
+    elif isinstance(tool_input, dict) and isinstance(tool_input.get("command"), str):
+        blob = tool_input["command"]
+    else:
+        blob = json.dumps(tool_input, ensure_ascii=False)
     for rule in rules or []:
         try:
             if re.search(rule.get("tool", ""), tool_name or "") and (not rule.get("match") or re.search(rule["match"], blob)):
@@ -30,6 +40,14 @@ def match(rules, tool_name, tool_input):
         except re.error:
             continue
     return None
+
+
+def codex_payload(data):
+    """Codex's hook payload carries turn_id / tool_use_id; Claude Code's does not. Discriminate on the payload and
+    never on the environment — CODEX_* and CLAUDE_CODE_* both leak in when one harness launches the other, and this
+    decision must not depend on who started whom. The bias is deliberate: mistaking Claude for Codex still blocks
+    (Claude honours the same deny JSON), while mistaking Codex for Claude would exit 2 and let the call through."""
+    return any(k in data for k in ("turn_id", "tool_use_id"))
 
 
 def main():
@@ -51,8 +69,14 @@ def main():
         return 0
     cfg["hooks_dir"].mkdir(parents=True, exist_ok=True)
     (cfg["hooks_dir"] / "outbound").write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8")
-    print("sortie lock: %s is an outward action (list entry %s) — nothing goes out in the owner's name; "
-          "ask first" % (data.get("tool_name"), reason), file=sys.stderr)
+    msg = ("sortie lock: %s is an outward action (list entry %s) — nothing goes out in the owner's name; "
+           "ask first" % (data.get("tool_name"), reason))
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": data.get("hook_event_name") or "PreToolUse",
+                                             "permissionDecision": "deny", "permissionDecisionReason": msg}},
+                     ensure_ascii=False))     # the reason must be non-empty or the deny is rejected as invalid
+    if codex_payload(data):
+        return 0                              # Codex reads that JSON only from a process that exits 0 (D56)
+    print(msg, file=sys.stderr)               # Claude Code: exit 2 + stderr is its blocking channel
     return 2
 
 

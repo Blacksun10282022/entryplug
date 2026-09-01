@@ -98,7 +98,30 @@ def step_mcp(cfg):
                    "MCP answers but the Chinese query %r returned 0 (tokenizer or index is broken)" % q)
 
 
-def step_outbound(cfg):
+def codex_posture():
+    """Codex's own approval policy and sandbox, read from ~/.codex/config.toml. The sortie lock does block here
+    (D56); these two are the layer on top of it, and worth printing because they decide what happens to everything
+    the outbound list does not name."""
+    p = Path(os.path.expanduser("~/.codex/config.toml"))
+    if not p.exists():
+        return "~/.codex/config.toml not found — check `approval_policy` / `sandbox_mode` yourself"
+    try:
+        t = p.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return "~/.codex/config.toml unreadable (%s) — check it yourself" % e
+    got = {}
+    for k in ("approval_policy", "sandbox_mode"):
+        m = re.search(r"^\s*%s\s*=\s*[\"\']([^\"\']+)" % k, t, re.M)
+        got[k] = m.group(1) if m else "unset"
+    plain = {"never": "nothing is ever asked", "on-request": "it asks when it wants more", "untrusted": "asks outside trusted commands",
+             "on-failure": "asks only after a sandboxed failure", "danger-full-access": "no sandbox at all",
+             "workspace-write": "may write in the workspace", "read-only": "cannot write"}
+    return "approval_policy=%s (%s) · sandbox_mode=%s (%s)" % (
+        got["approval_policy"], plain.get(got["approval_policy"], "?"),
+        got["sandbox_mode"], plain.get(got["sandbox_mode"], "?"))
+
+
+def step_outbound(cfg, pilot="claude-code"):
     if not (GATES / "outbound.py").exists():
         return False, "gates/outbound.py not found (install the machine from the repo: pip install -e)"
     if not cfg["outbound"]:
@@ -113,8 +136,15 @@ def step_outbound(cfg):
     codes = [_run([sys.executable, str(GATES / "outbound.py")], cfg["root"], {"PLUG_ROOT": str(cfg["root"])}, json.dumps(f)).returncode for f in (fake, fake2)]
     after = stamp.read_text(encoding="utf-8") if stamp.exists() else None
     ok = 2 in codes and after is not None and after != before
-    return ok, ("fake outbound action blocked (exit 2), last fired %s" % after) if ok else \
-        "the fake outbound action was not blocked (exit codes %s) or left no stamp" % codes
+    if not ok:
+        return False, "the fake outbound action was not blocked (exit codes %s) or left no stamp" % codes
+    if pilot == "codex":                      # D56: Codex blocks on the deny JSON, from a process that exits 0
+        stale = config.codex_trust(cfg)       # D58: an untrusted hook is skipped silently, so the gate proves nothing
+        if stale:
+            return False, "the gate itself works, but Codex will not run it: %s" % stale
+        return True, ("fake outbound action blocked (deny decision honoured), last fired %s · hooks trusted · Codex's "
+                      "own policy is a separate layer on top: %s" % (after, codex_posture()))
+    return True, "fake outbound action blocked (exit 2), last fired %s" % after
 
 
 def step_protected(cfg, pilot):
@@ -157,7 +187,7 @@ def step_protected(cfg, pilot):
 def run(cfg, pilot):
     hv = harness_version(pilot)
     steps = [("① manual visible", *step_skills(cfg, pilot)), ("② MCP search", *step_mcp(cfg)),
-             ("③ sortie lock", *step_outbound(cfg)), ("④ protected write", *step_protected(cfg, pilot))]
+             ("③ sortie lock", *step_outbound(cfg, pilot)), ("④ protected write", *step_protected(cfg, pilot))]
     lines = ["first contact · %s · harness %s · entryplug %s · %s" % (pilot, hv, __version__, time.strftime("%Y-%m-%d %H:%M"))]
     lines += ["%s %s · %s" % (name, "OK  " if ok else "FAIL", msg) for name, ok, msg in steps]
     bad = [i + 1 for i, s in enumerate(steps) if not s[1]]

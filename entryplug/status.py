@@ -118,6 +118,8 @@ def check_sortie(cfg):
         return False, "no outbound list in plug.yaml"
     if "outbound.py" not in hooks_text(cfg["root"]):
         return False, "hook not wired"
+    if config.codex_trust(cfg):               # D58: Codex skips an untrusted hook silently — do not report armed
+        return False, "armed for Claude Code; Codex has not trusted these hooks, so it skips them"
     return True, "armed" + (" (passing through: .plug-off)" if config.plug_off(cfg) else "")
 
 
@@ -133,7 +135,8 @@ def check_equipment(cfg):
 LAYERS = {"index": "the index layer", "base": "the Base", "at-field": "the AT-Field",
           "berserk": "the berserk lock", "sortie": "the sortie lock", "equipment": "the equipment bay"}
 HINTS = {"index": "plug index", "base": "write self/RULES.md", "at-field": "plug init --pilot both",
-         "berserk": "plug init --pilot both (and unset KB_APPROVE)", "sortie": "plug init --pilot both",
+         "berserk": "plug init --pilot both (and unset KB_APPROVE)",
+         "sortie": "plug init --pilot both — and if it is the Codex trust line above, open an interactive codex once and trust the hooks",
          "equipment": "fix the tools: list in plug.yaml"}
 
 
@@ -162,9 +165,16 @@ def panel(cfg):
 
 
 def run(cfg, emit=False):
-    text, code = panel(cfg)
-    if emit:                                  # SessionStart: hand the panel over as additionalContext, nothing else
+    """--emit is fail-safe by contract: a boot panel is a diagnostic, so a degraded layer prints [NG] inside the
+    panel and a crashed panel says so in one line — neither ends the session with a nonzero exit (D53). Only the
+    plain (non-emit) form propagates the index-layer exit code, because there a human is reading it."""
+    if emit:
+        try:
+            text = panel(cfg)[0]
+        except Exception as e:                # never let a broken panel take the session down with it
+            text = "ENTRY PLUG — INSERTION SEQUENCE\n[NG] panel ............... could not be built (%s: %s)" % (type(e).__name__, e)
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}, ensure_ascii=False))
         return 0
+    text, code = panel(cfg)
     print(text)
     return code

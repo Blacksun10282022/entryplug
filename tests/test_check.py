@@ -152,3 +152,26 @@ def test_numbers_blind_check_uses_git_history(git_repo):
     assert "| agreement rate (blind-valid) | 1/1" in page and "(3 non-blind excluded)" in page
     assert "| rule references real | 6/6 |" in page and "| quotes verifiable | 6/6 |" in page
     assert "unclear 1" in page and "unanswered 1" in page
+LYING_MAP = "# map\n- Sortie lock: on this side the hook only records; it cannot veto a tool call.\n"
+HONEST_MAP = "# map\n- Sortie lock: anything outward is blocked by a hook - ask him first.\n"
+
+
+def test_map_denying_a_lock_the_pilot_does_have_is_a_warning(repo):
+    """The sortie lock blocks on both pilots (D56). A deployed map telling a pilot that nothing stops it is the
+    dangerous direction now — it will act as if nothing does — so that claim must be caught mechanically rather
+    than by someone happening to reread the file (D55). Applies to both maps, since both really do block."""
+    root = repo["root"]
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        (root / name).write_text(LYING_MAP, encoding="utf-8")
+        assert "map_claim" in codes(run(repo), "warnings"), name
+        (root / name).write_text(HONEST_MAP, encoding="utf-8")
+        assert "map_claim" not in codes(run(repo), "warnings"), name
+
+
+def test_the_shipped_map_templates_do_not_trip_their_own_check(repo):
+    """Both templates a new install receives must pass the check that guards them."""
+    from conftest import ROOT
+    from entryplug.check import MAP_LIE
+    for rel in ("pilots/codex/AGENTS.md", "pilots/claude-code/CLAUDE.md"):
+        assert not MAP_LIE.search((ROOT / rel).read_text(encoding="utf-8")), rel
+    assert MAP_LIE.search(LYING_MAP)                      # the pattern is not vacuous

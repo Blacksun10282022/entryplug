@@ -64,7 +64,10 @@ def main(argv):
         (cfg["hooks_dir"] / "precompact").write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8", newline="\n")
         print(text)
         return 0
-    text = cfg["pin_path"].read_text(encoding="utf-8") if cfg["pin_path"].exists() else pin(cfg)
+    try:                                      # re-injection is a diagnostic too: never end a session on a bad pin
+        text = cfg["pin_path"].read_text(encoding="utf-8") if cfg["pin_path"].exists() else pin(cfg)
+    except Exception as e:
+        text = "[entry plug · compaction pin unavailable: %s: %s]" % (type(e).__name__, e)
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}, ensure_ascii=False))
     return 0
 

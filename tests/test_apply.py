@@ -51,6 +51,21 @@ def test_add_and_rollback_on_check_error(git_repo):
     assert plug(root, "apply", str(wrong.relative_to(root))).returncode == 1
 
 
+def test_target_that_contains_a_fence_survives_a_longer_outer_fence(git_repo):
+    """A target file carrying its own ``` block: the outer run has to be longer, and the inner one must stay put.
+    New in this build — before it, `(.*?)\\n```` stopped at the first inner fence and silently truncated the file
+    (everything after it was dropped from the landed content), and shapes.sections toggled back out of the block
+    so a `## …` line inside the carried file was read as a proposal heading."""
+    root = git_repo["root"]
+    carried = "---\nkind: concept\ntitle: 围栏\naliases: [fence1, fence2]\n---\n## 定义\n带围栏的一页\n\n```py\nprint(1)\n```\n\n## 观察\n- 一句 ^p0801 (src: sunzi-01-shiji#3 \"兵者，诡道也\")\n\n## 关系\n- [[势]] [[形]]\n"
+    p = proposal(root, "2026-08-30-fenced.md", "tools/sunzi/dict/fenced.md", "new", "````md\n" + carried + "````")
+    r = plug(root, "apply", str(p.relative_to(root)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    landed = (root / "tools/sunzi/dict/fenced.md").read_text(encoding="utf-8")
+    assert landed == carried, "the carried file must land byte-for-byte, inner fence and all"
+    assert "```py\nprint(1)\n```" in landed and landed.rstrip().endswith("[[势]] [[形]]")
+
+
 def test_retire_rolls_back_when_links_break_and_works_for_playbook(git_repo):
     root = git_repo["root"]
     h = apply.blob_hash((root / "tools/sunzi/dict/fan-jian.md").read_bytes())

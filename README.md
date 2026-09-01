@@ -29,7 +29,11 @@ what the deny half is worth: the rules live in `<content-repo>/.claude/settings.
 directory — edits those files with nothing in its way, and only pre-commit stops the result from landing. That is
 why pre-commit is the airtight layer and deny is the polite one. The
 **sortie lock** (nothing goes out in the owner's name — ask first) = a PreToolUse hook, one list shared by Claude
-Code and Codex. Plus a compaction pin and a Stop-hook record reminder, both reminder-level.
+Code and Codex, and it really blocks on both. The decision is the same JSON either way —
+`hookSpecificOutput.permissionDecision: "deny"` with a non-empty `permissionDecisionReason` — but the exit code is
+not: Claude Code blocks on exit 2, while Codex honours the deny only from a process that exits 0 (D56). Codex's own
+`approval_policy` and `sandbox_mode` sit on top as a second layer; `plug check --contact codex` prints both so you
+can see what else is or is not in the way. Plus a compaction pin and a Stop-hook record reminder, both reminder-level.
 
 ## Five minutes
 
@@ -44,6 +48,18 @@ plug --root example-tool eval bench/public/goldset-sunzi.yaml
 python -m pytest            # one group per verb, per gate, per kind of ERROR
 python tests/acceptance.py  # the acceptance script C0–C4: machine items PASS/FAIL, human items MANUAL
 ```
+
+### Updating an install after the machine changes
+
+`plug init` is idempotent, but it writes the maps (`CLAUDE.md` / `AGENTS.md`) **only when they are absent** — they
+are meant to be edited after install, so it will not overwrite yours. The consequence worth knowing: when a
+template is corrected here, repos installed earlier keep the old text. Generated files (hooks, deny rules,
+`.mcp.json`, the manual mirror) *are* refreshed by re-running `plug init`; the maps are not.
+
+So after upgrading the machine: re-run `plug init --pilot both`, then diff your maps against
+`pilots/*/CLAUDE.md` / `pilots/codex/AGENTS.md` and copy over anything that changed. `plug check` mechanically
+catches the one stale claim that misleads a pilot about its own limits (code `map_claim`); everything else is on
+the diff.
 
 Build your own content repo the way `example-tool/` is built (`plug.yaml` is the only place a path may appear),
 then run `plug init --pilot both` inside it to install the gates and the pilot shells, then `plug index`,

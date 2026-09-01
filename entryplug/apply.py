@@ -69,10 +69,12 @@ def parse_proposal(path):
     p = shapes.parse_file(text, "proposal")
     body = p["sections"].get("改成什么", "")
     first = next((l.strip() for l in body.splitlines() if l.strip()), "")
-    m = re.search(r"```[\w-]*\n(.*?)\n```", body, re.S)
+    # CommonMark fencing: the opening run is 3+ backticks and only a run at least as long closes it, so a target
+    # file that itself contains ``` can be carried inside a ```` block instead of truncating at its first fence.
+    m = re.search(r"(?m)^(`{3,})[\w-]*[ \t]*\n(.*?)\n\1`*[ \t]*$", body, re.S)
     out = {"fm": p["fm"], "text": text, "errors": list(p["errors"]), "content": None, "retire": first.lower() in ("retire", "退役")}
     if m and not out["retire"]:
-        out["content"] = m.group(1) + "\n"
+        out["content"] = m.group(2) + "\n"
     elif not out["retire"]:
         out["errors"].append("「改成什么」holds no whole-file code block (```…```) and is not `retire` — the machine cannot land it; rewrite the proposal")
     return out

@@ -15,6 +15,7 @@ HOOKS = ("precommit", "outbound", "precompact", "stop")
 VERBS = ("index", "check", "apply", "eval", "search", "status", "init", "mcp", "hash")
 PATHISH = re.compile(r"(?<![\w/`.])((?:self|tools|proposals|playbooks|dict|corpus|materials|records|checks)/[\w\-./]*\w)")
 OTHER_PARTY = re.compile(r"^\s*[-*]\s*(让|叫|要求|告诉|向|逼|劝)对方")
+MAP_LIE = re.compile(r"(?i)sortie lock.{0,200}(only records|cannot veto|records, not a lock|obligation, not a fence)")
 DESC_ONE, DESC_TOTAL, EXPIRE_DAYS, HOOK_DAYS, NEW_DAYS = 1536, 4000, 30, 30, 30
 
 
@@ -55,9 +56,8 @@ def run(cfg, expire=True, tool_checks=True, today=None):
     err = lambda code, f, msg: E.append({"level": "ERROR", "code": code, "file": f, "msg": msg, "at": at})
     warn = lambda code, f, msg: W.append({"level": "WARNING", "code": code, "file": f, "msg": msg, "at": at})
     shape_ok, machine_ok = config.version_ok(cfg)
-    header = {"at": at, "machine": __version__, "machine_pin": cfg["machine_pin"], "shape_version": cfg.get("shape_version"),
-              "shape_ok": shape_ok, "tools": [t["name"] for t in cfg["tools"]], "hooks": {}, "index_built": None,
-              "index_stale": None, "plug_off": config.plug_off(cfg)}
+    header = {"at": at, "machine": __version__, "machine_pin": cfg["machine_pin"], "shape_version": cfg.get("shape_version"), "shape_ok": shape_ok,
+              "tools": [t["name"] for t in cfg["tools"]], "hooks": {}, "index_built": None, "index_stale": None, "plug_off": config.plug_off(cfg)}
     out = {"errors": E, "warnings": W, "header": header, "moved": moved, "records": [], "proposals": [], "materials": [],
            "entries": {}, "orphans": [], "numbers": "", "rules": None}
     if not shape_ok:
@@ -192,10 +192,14 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         warn("desc", m["rel"], "description is %d chars > %d; it will be truncated in the skill list" % (len(d), DESC_ONE))
     if sum(len(d) for _, d in descs) > DESC_TOTAL:
         warn("desc", "tools", "manual descriptions total %d chars > the %d list budget" % (sum(len(d) for _, d in descs), DESC_TOTAL))
-    # —— paths and commands · index.md · hooks · index freshness · equipment checks ——
+    # —— paths and commands · the map's claims · index.md · hooks · index freshness · equipment checks ——
+    maps = [(n, (root / n).read_text(encoding="utf-8"), root) for n in ("CLAUDE.md", "AGENTS.md") if (root / n).exists()]
+    for m in [x for x in [config.codex_trust(cfg)] if x]:
+        warn("codex_trust", ".codex/hooks.json", m)
+    for rel, x, _ in [m for m in maps if MAP_LIE.search(m[1])]:
+        warn("map_claim", rel, "this map says the sortie lock only records / cannot veto — it does block, on both pilots (D56). A pilot told nothing stops it will act as if nothing does. Replace that line from pilots/")
     for rel, text, base in ([("self/RULES.md", rules["text"], root)] if rules else []) + \
-            [(m["rel"], m["text"], m["path"].parent) for m in manuals] + \
-            [(n, (root / n).read_text(encoding="utf-8"), root) for n in ("CLAUDE.md", "AGENTS.md") if (root / n).exists()]:
+            [(m["rel"], m["text"], m["path"].parent) for m in manuals] + maps:
         for tok in set(PATHISH.findall(text)):
             if "<" not in tok and not any((b / tok).exists() for b in (root, base, cfg["self_dir"])):
                 warn("path", rel, "path resolves to nothing that exists: %s" % tok)
@@ -212,8 +216,7 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         if len(lines) > 200_000:
             warn("index_md", cfg["index_md"], "index.md is oversized (%d chars)" % len(lines))
     for h in HOOKS:
-        stamp = cfg["hooks_dir"] / h
-        header["hooks"][h] = last = stamp.read_text(encoding="utf-8").strip() if stamp.exists() else None
+        header["hooks"][h] = last = (cfg["hooks_dir"] / h).read_text(encoding="utf-8").strip() if (cfg["hooks_dir"] / h).exists() else None
         if not last or (today - date.fromisoformat(last[:10])).days > HOOK_DAYS:
             warn("hook", ".kb/hooks/" + h, "hook %s %s" % (h, "has never fired" if not last else "last fired %s, over %d days ago" % (last, HOOK_DAYS)))
     if cfg["index_path"].exists():

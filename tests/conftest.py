@@ -1,6 +1,6 @@
 # Shared fixtures: a temporary copy of the example equipment (indexed), a copy with git, and a helper that runs
 # `plug` as a subprocess. The machine's tests only ever run against example-tool, never a real content repo.
-import os, shutil, subprocess, sys
+import os, pathlib, shutil, subprocess, sys
 from pathlib import Path
 import pytest
 
@@ -54,6 +54,21 @@ def git_repo(repo):
     r = git(root, "commit", "-q", "-m", "init")
     assert r.returncode == 0, r.stderr
     return repo
+
+
+def trust_codex(root, home):
+    """Stand in for the owner trusting the hooks once on Codex's `Hooks need review` screen: write a CODEX_HOME
+    whose config.toml records, for every installed hook, the hash Codex would record for it.
+    Returns the env to pass to plug(). These hashes come from our own reimplementation, so this fixture cannot
+    prove the recipe is right — test_codex_trust_uses_codex_own_hash_recipe pins that against a fixed vector."""
+    from entryplug import config
+    home = pathlib.Path(home)
+    home.mkdir(parents=True, exist_ok=True)
+    body = "[hooks.state]\n\n" + "".join(
+        "[hooks.state.'%s']\ntrusted_hash = \"%s\"\n\n" % (k, h)
+        for k, h in config.codex_hooks(pathlib.Path(root) / ".codex" / "hooks.json"))
+    (home / "config.toml").write_text(body, encoding="utf-8")
+    return {"CODEX_HOME": str(home)}
 
 
 def plug(root, *args, env=None, stdin=None):

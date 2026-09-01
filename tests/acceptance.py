@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import ROOT, copy_example, git, owner_env, plug  # noqa: E402
+from conftest import ROOT, copy_example, git, owner_env, plug, trust_codex  # noqa: E402
 
 GATES = ROOT / "gates"
 PENDING = "proposals/pending/2026-08-26-shi-alias.md"
@@ -45,6 +45,10 @@ def setup():
     item("C0.0", "plug init --pilot both installs pre-commit, deny rules, hooks, .mcp.json, the map and the mirror", ok,
          [l for l in r.stdout.splitlines() if "pre-commit" in l][:1])
     plug(root, "index")
+    globals()["CODEX_ENV"] = trust_codex(root, root.parent / "codexhome")   # the owner trusts the hooks once (D58)
+    item("C0.7", "Codex hooks need trusting after every rewrite; untrusted ones are skipped silently",
+         bool(CODEX_ENV) and "codex_trust" not in plug(root, "check", "--quiet", "--no-expire", env=CODEX_ENV).stdout,
+         "trusted in the fixture; plug init prints RE-TRUST when it changes them")
     return root
 
 
@@ -73,7 +77,7 @@ def c0(root):
     item("C0.5", "the check-up header reports a stale index and a hook that has not fired", "WARNING index_stale" in r.stdout and "WARNING hook" in r.stdout)
     p.write_text(orig, encoding="utf-8", newline="\n")
     plug(root, "index")
-    r = plug(root, "status")
+    r = plug(root, "status", env=CODEX_ENV)
     lines = r.stdout.splitlines()
     ok = r.returncode == 0 and len(lines) > 7 and all(l.startswith("[OK]") for l in lines[1:6]) and "ALL SYSTEMS NOMINAL" in lines[-1]
     item("C0.6", "plug status: every layer green once the gates are installed, sync rate 100%", ok, lines[-1] if lines else r.stderr.strip())
@@ -163,7 +167,7 @@ def c3(root):
 
 def c4(root):
     for cid, pilot in (("C4.1", "claude-code"), ("C4.2", "codex")):
-        r = plug(root, "check", "--contact", pilot)
+        r = plug(root, "check", "--contact", pilot, env=CODEX_ENV)
         item(cid, "plug check --contact %s: all four steps green" % pilot,
              r.returncode == 0 and r.stdout.strip().endswith("first contact, nothing wrong"), r.stdout.strip().splitlines()[0])
     bys = " ".join(p.read_text(encoding="utf-8") for p in (root / "self/records").glob("*.md"))

@@ -2,7 +2,7 @@
 # a layer is down, ALL SYSTEMS NOMINAL once plug init has run, and a nonzero exit only when the index is unusable.
 import json
 from entryplug import status
-from conftest import plug
+from conftest import plug, trust_codex
 
 
 def test_panel_on_the_bare_example_fixture(repo):
@@ -22,7 +22,8 @@ def test_all_systems_nominal_after_init(git_repo):
     root = git_repo["root"]
     assert plug(root, "init", "--pilot", "both").returncode == 0
     assert plug(root, "index").returncode == 0
-    r = plug(root, "status")
+    env = trust_codex(root, root.parent / "codexhome")     # untrusted Codex hooks are skipped, so the lock is not armed
+    r = plug(root, "status", env=env)
     assert r.returncode == 0, r.stdout + r.stderr
     lines = r.stdout.splitlines()
     assert all(l.startswith("[OK]") for l in lines[1:6]), lines
@@ -52,3 +53,20 @@ def test_emit_wraps_the_panel_for_session_start(repo):
     j = json.loads(r.stdout)
     assert j["hookSpecificOutput"]["hookEventName"] == "SessionStart"
     assert "INSERTION SEQUENCE" in j["hookSpecificOutput"]["additionalContext"]
+def test_emit_never_exits_nonzero_even_when_the_panel_breaks(repo, monkeypatch):
+    """--emit feeds a SessionStart hook: a degraded layer belongs in the panel as [NG], and a panel that throws
+    should say so in one line rather than end the session with a nonzero exit (D54)."""
+    repo["index_path"].unlink()                       # index layer dead: plain status exits 1 ...
+    assert status.run(repo, emit=False) == 1
+    assert status.run(repo, emit=True) == 0           # ... but --emit still exits 0
+    def boom(cfg):
+        raise RuntimeError("panel exploded")
+    monkeypatch.setattr(status, "panel", boom)
+    assert status.run(repo, emit=True) == 0           # even a crashing panel must not take the session down
+
+
+def test_emit_payload_is_session_start_context(repo, capsys):
+    status.run(repo, emit=True)
+    out = json.loads(capsys.readouterr().out)
+    assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+    assert "INSERTION SEQUENCE" in out["hookSpecificOutput"]["additionalContext"]

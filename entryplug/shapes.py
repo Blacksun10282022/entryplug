@@ -56,9 +56,12 @@ def split_frontmatter(text):
 
 def sections(body):
     """## heading → text, in order. The '' key holds whatever precedes the first heading."""
-    out, cur, fence = {"": []}, "", False
+    out, cur, fence = {"": []}, "", 0                 # fence = length of the open run, 0 when outside one
     for line in body.splitlines():
-        fence ^= line.startswith("```")
+        run = re.match(r"^(`{3,})", line)
+        if run:                                       # only a run at least as long closes the one that is open,
+            n = len(run.group(1))                     # so ``` inside a ```` block stays inert (same rule as apply)
+            fence = n if not fence else (0 if n >= fence else fence)
         m = None if fence else re.match(r"^##\s+(.+?)\s*$", line)
         if m:
             cur = m.group(1).strip()

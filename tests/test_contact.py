@@ -24,7 +24,9 @@ def test_contact_all_green_both_pilots(git_repo):
         lines = r.stdout.splitlines()
         assert lines[0].startswith("first contact · %s · harness " % pilot)
         assert [l[:1] for l in lines[1:5]] == ["①", "②", "③", "④"] and all(" OK " in l for l in lines[1:5])
-        assert "Chinese query" in lines[2] and "hit" in lines[2] and "exit 2" in lines[3]
+        assert "Chinese query" in lines[2] and "hit" in lines[2]
+        blocked = "exit 2" if pilot == "claude-code" else "deny decision honoured"   # D56: one deny, two exit codes
+        assert blocked in lines[3], lines[3]
         assert lines[-1] == "first contact, nothing wrong"
     assert "Codex has no permissions.deny" in r.stdout
     assert "first contact codex" in git_repo["numbers_path"].read_text(encoding="utf-8")
@@ -66,3 +68,18 @@ def test_contact_step_four_does_not_claim_deny_is_in_force(git_repo):
     r = plug(root, "check", "--contact", "claude-code")
     step4 = r.stdout.splitlines()[4]
     assert "written, NOT proven in force" in step4 and "project root is this repo" in step4, step4
+def test_contact_reports_a_real_block_on_both_pilots(git_repo):
+    """The sortie lock blocks on both sides (D56): Claude Code on exit 2, Codex on the deny JSON. Step 3 says so,
+    and on the Codex side it also prints the owner's approval_policy / sandbox_mode — the layer on top."""
+    from entryplug import contact
+    root = git_repo["root"]
+    install(root)
+    c = plug(root, "check", "--contact", "codex")
+    step3 = c.stdout.splitlines()[3]
+    assert "blocked (deny decision honoured)" in step3, step3
+    assert "only RECORDS" not in step3 and "cannot veto" not in step3, step3
+    assert "approval_policy=" in step3 and "sandbox_mode=" in step3, step3
+    k = plug(root, "check", "--contact", "claude-code")
+    assert "blocked (exit 2)" in k.stdout.splitlines()[3]
+    posture = contact.codex_posture()
+    assert "approval_policy=" in posture or "not found" in posture or "unreadable" in posture

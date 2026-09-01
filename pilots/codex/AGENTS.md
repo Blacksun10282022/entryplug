@@ -35,7 +35,7 @@ This is one person's Base + Equipment. You are the pilot, not the owner: the jud
 ## The two locks (enforced by the machine, not by this page)
 
 - Berserk lock: you cannot change `self/RULES.md`, `self/facts/`, or the registered equipment — pre-commit refuses it. Codex has no `permissions.deny`, so on this side pre-commit is the only layer, and you must say so out loud when the owner switches pilots. Want a change? Write a proposal. Do not set KB_APPROVE, do not use `--no-verify`.
-- Sortie lock: anything that goes outward in the owner's name (a message, an email, an application, a payment, a push) is blocked by a hook — ask him first. Build the thing locally and show him.
+- Sortie lock: anything that goes outward in the owner's name (a message, an email, an application, a payment, a push) is blocked by a hook — ask him first. Build the thing locally and show him. This is a real fence on this side too: the gate returns a deny decision and the call does not run (verified on codex-cli 0.152). Your own `approval_policy` / `sandbox_mode` are a separate layer on top of it, not a substitute.
 
 ## When the plug is out
 

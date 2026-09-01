@@ -9,6 +9,10 @@
 # Not:  never touches content (self/ tools/ proposals/); never edits plug.yaml; never writes into the user's home
 #       except under --link-skills; never overwrites someone else's pre-commit (it renames it aside).
 #       No user-level MCP registration, ever.
+#       The maps (CLAUDE.md / AGENTS.md) are written ONLY when absent, because they are edited after install. The
+#       cost is that a corrected template never reaches a repo that already has one: fixing pilots/codex/AGENTS.md
+#       fixes the next install, not the last. Existing installs must be updated by hand — `plug check` catches the
+#       one claim that matters (code `map_claim`, D53), the rest is a diff against the template.
 # Who:  the owner (once per content repo) · tests · acceptance (after install, plug check --contact must be green).
 # Note: paths (D34) — generated pilot files carry real absolute paths; deny rules want the //c/… form and hook
 #       commands use the current interpreter's absolute path. The hook goes into .git/hooks/pre-commit (git pull
@@ -42,7 +46,11 @@ def deny_rules(cfg):
         p = str(t["path"]).strip("/").replace("\\", "/")
         rules += ["Edit(%s/%s/%s)" % (base, p, x) for x in TOOL_PROTECT]
     rules += ["Edit(%s/%s)" % (base, str(x).strip("/").replace("\\", "/")) for x in cfg.get("protect") or []]
-    return rules + ["Read(%s/%s/**)" % (base, cfg["hooks"])]
+    # The hook stamps: deny the WRITE, not the read. A pilot that cannot read them cannot check whether a gate
+    # actually fired — and `plug check` prints them in its header anyway, so denying the read hid nothing while
+    # turning verification into hearsay. Forging one, on the other hand, silences the "this hook has not fired"
+    # warning, and .kb/ is gitignored so pre-commit never sees it. That is the direction worth closing.
+    return rules + ["Edit(%s/%s/**)" % (base, cfg["hooks"])]
 
 
 def put(path, text, log):
@@ -70,6 +78,35 @@ def hook_cmd(script, *args):
 
 def cli_cmd(cfg, *args):
     return '"%s" -m entryplug.cli --root "%s" %s' % (PY, cfg["root"].as_posix(), " ".join(args))
+
+
+def codex_cmd(*parts):
+    """Codex takes `command` as ONE string and splits it on whitespace without honouring quotes, so the Claude
+    form (quoted paths) makes it try to spawn a program whose name contains quote characters — which is why every
+    Codex hook reported Failed. Emit bare, space-separated words instead. A path containing a space cannot be
+    expressed this way at all; spaced() reports that so init can warn instead of writing something that dies later."""
+    return " ".join(str(p) for p in parts)
+
+
+def spaced(*parts):
+    return [str(p) for p in parts if " " in str(p)]
+
+
+def codex_hooks(cfg):
+    """The same five gates, in Codex 0.152's shape: {hooks: {<Event>: [{matcher, hooks: [handler]}]}} with
+    handler {type, command, timeout}. Event names are PascalCase, the payload is Claude-shaped, so the gate
+    scripts are unchanged. PreToolUse blocks here as it does on Claude Code: the deny decision goes on stdout and
+    the process exits 0 (D56) — outbound.py handles both. (D53 first concluded that Codex hooks cannot veto; that
+    was wrong, and D57 says why: the three forms tried are each marked unsupported in Codex's own binary.)
+    What Codex still has no equivalent of is `permissions.deny`, so the berserk lock leans on pre-commit alone."""
+    gate = lambda s, *a: codex_cmd(PY, (REPO / "gates" / s).as_posix(), *a)
+    cli = codex_cmd(PY, "-m", "entryplug.cli", "--root", cfg["root"].as_posix(), "status", "--emit")
+    return {"hooks": {
+        "PreToolUse": [{"matcher": "Bash|shell|mcp__.*", "hooks": [{"type": "command", "command": gate("outbound.py"), "timeout": 30}]}],
+        "PreCompact": [{"hooks": [{"type": "command", "command": gate("precompact.py"), "timeout": 30}]}],
+        "SessionStart": [{"hooks": [{"type": "command", "command": cli, "timeout": 30}]}],
+        "Stop": [{"hooks": [{"type": "command", "command": gate("stop.py"), "timeout": 20}]}],
+    }}
 
 
 def merge_hooks(cfg):
@@ -137,7 +174,19 @@ def claude(cfg, log):
 
 def codex(cfg, log):
     copy_if_absent(REPO / "pilots" / "codex" / "AGENTS.md", cfg["root"] / "AGENTS.md", log)
-    merge_json(cfg["root"] / ".codex" / "hooks.json", merge_hooks(cfg), log)
+    bad = spaced(PY, (REPO / "gates").as_posix(), cfg["root"].as_posix())
+    if bad:
+        log.append(("WARNING", "Codex hooks: a path contains a space (%s) — Codex splits `command` on whitespace "
+                               "and honours no quoting, so its hooks will not start. Move the machine, the content "
+                               "repo or python somewhere without spaces." % bad[0]))
+    hooks_json = cfg["root"] / ".codex" / "hooks.json"
+    before = hooks_json.read_text(encoding="utf-8") if hooks_json.exists() else None
+    put(hooks_json, json.dumps(codex_hooks(cfg), ensure_ascii=False, indent=2) + "\n", log)
+    if before != hooks_json.read_text(encoding="utf-8"):   # changed content = Codex will skip them until re-trusted
+        log.append(("RE-TRUST", "Codex hooks changed. Codex runs a hook only while its recorded trusted_hash still "
+                                "matches, and skips it SILENTLY otherwise — open an interactive `codex` in this repo "
+                                "once and trust them on its `Hooks need review` screen, or the sortie lock does "
+                                "not run on that side."))
     toml = cfg["root"] / ".codex" / "config.toml"
     old = toml.read_text(encoding="utf-8") if toml.exists() else ""
     if "[mcp_servers.entryplug]" in old:

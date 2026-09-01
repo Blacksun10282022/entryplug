@@ -9,7 +9,7 @@
 #       dict · material · corpus · checks · proposal · numbers. work/ and workshop/ are unprotected, unindexed
 #       zones. `corpus:` declares corpus outside an equipment; `protect:` adds to the berserk lock, both layers.
 # Deps: stdlib + PyYAML. Shape version and machine version are pinned in entryplug/__init__.py.
-import os, fnmatch
+import json, os, fnmatch, hashlib, re
 from pathlib import Path
 import yaml
 from . import __version__, SHAPE_VERSION
@@ -127,6 +127,69 @@ def is_protected(cfg, relpath):
     if rp.startswith("tools/") and not any(rp == d or rp.startswith(d + "/") for d in tool_dirs(cfg)):
         return False
     return matches(protect_patterns(cfg), rp) and not matches(cfg["unprotected"], rp)
+
+
+CODEX_EVENTS = {"PreToolUse": "pre_tool_use", "PermissionRequest": "permission_request", "PostToolUse": "post_tool_use",
+                "PreCompact": "pre_compact", "PostCompact": "post_compact", "SessionStart": "session_start",
+                "SessionEnd": "session_end", "UserPromptSubmit": "user_prompt_submit", "SubagentStart": "subagent_start",
+                "SubagentStop": "subagent_stop", "Stop": "stop", "Interrupt": "interrupt"}
+CODEX_CONTEXT = ("pre_tool_use", "post_tool_use", "session_start", "user_prompt_submit", "subagent_start")
+
+
+def codex_hooks(hooks_json):
+    """Every handler in a Codex hooks.json as (trust key, the hash Codex expects it to have).
+    Key: <abs path>:<event_snake>:<group index>:<handler index>. Hash: sha256 over the canonical JSON of the
+    handler after Codex normalises it — Codex's own recipe (D58), checked against five hashes Codex wrote."""
+    try:
+        cfg = (json.loads(hooks_json.read_text(encoding="utf-8")) or {}).get("hooks") or {}
+    except (OSError, ValueError, AttributeError):
+        return []
+    out = []
+    for ev, groups in cfg.items():
+        snake = CODEX_EVENTS.get(ev, ev.lower())
+        for gi, g in enumerate(groups or []):
+            for hi, h in enumerate((g or {}).get("hooks") or []):
+                t, short = h.get("timeout"), snake in ("session_end", "interrupt")
+                t = min(max(1 if t is None else t, 1), 3) if short else max(600 if t is None else t, 1)
+                hook = {"type": "command", "command": h.get("command") or "", "timeout": t, "async": bool(h.get("async"))}
+                if h.get("statusMessage") is not None:
+                    hook["statusMessage"] = h["statusMessage"]
+                if h.get("additionalContextLimit") not in (None, 2500) and snake in CODEX_CONTEXT:
+                    hook["additionalContextLimit"] = h["additionalContextLimit"]
+                obj = {"event_name": snake, "hooks": [hook]}
+                if (g or {}).get("matcher") is not None:
+                    obj["matcher"] = g["matcher"]
+                blob = json.dumps(obj, separators=(",", ":"), ensure_ascii=False, sort_keys=True)
+                out.append(("%s:%s:%d:%d" % (hooks_json, snake, gi, hi), "sha256:" + hashlib.sha256(blob.encode("utf-8")).hexdigest()))
+    return out
+
+
+def codex_trust(cfg, codex_home=None):
+    """Whether Codex will really run the hooks installed here, decided the way Codex decides it.
+    Codex runs a hook only while the `trusted_hash` recorded in ~/.codex/config.toml still matches the hook as
+    it stands now. A hook that changed is skipped SILENTLY — no error, no line printed — so every `plug init`
+    that rewrites hooks.json disarms the Codex side until the owner trusts it again (D58). We recompute Codex's
+    own hash rather than guess from timestamps, so this says what Codex will do. None when every hook will run,
+    otherwise one line: what is wrong and how to fix it."""
+    hooks = cfg["root"] / ".codex" / "hooks.json"
+    if not hooks.exists():
+        return None
+    conf = Path(codex_home or os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
+    fix = "open an interactive `codex` in this repo once; it shows a `Hooks need review` screen — trust them there."
+    if not conf.exists():
+        return "Codex hooks are installed but %s does not exist, so nothing has ever been trusted and none of them runs. %s" % (conf, fix)
+    text = conf.read_text(encoding="utf-8", errors="replace")
+    state = {m.group(1).lower(): m.group(2) for m in re.finditer(r"\[hooks\.state\.'([^']+)'\]([^\[]*)", text)}
+    want = codex_hooks(hooks)
+    off = [k for k, _ in want if re.search(r"enabled\s*=\s*false", state.get(k.lower(), ""))]
+    bad = [k for k, h in want if k not in off and ('"%s"' % h) not in state.get(k.lower(), "")]
+    if off:
+        return "%d of the %d Codex hooks are switched off in %s, so Codex skips them. Turn them back on there." % (len(off), len(want), conf)
+    if not bad:
+        return None
+    if len(bad) == len(want):
+        return "none of the %d Codex hooks is trusted as it now stands, so Codex runs none of them and the sortie lock is off on that side. %s" % (len(want), fix)
+    return "%d of the %d Codex hooks changed since they were trusted, so Codex skips those silently. %s" % (len(bad), len(want), fix)
 
 
 def _md_files(d):
