@@ -1,7 +1,8 @@
 # STATUS
 
-Last verified on a real Claude Code 2.1.257 / codex-cli 0.152.0: **2026-09-02** (C1.2 deny under bypass: refused; the sortie
-lock in both pilots: refused; C2.3 / C3.3 / C4.4 still open). The four things that can only be seen in a live
+Last verified on a real Claude Code 2.1.259 / codex-cli 0.152.0: **2026-09-03** (C1.2 deny under bypass: refused; the sortie
+lock in both pilots: refused, including the PowerShell tool and, in an interactive session, the Artifact tool; C2.3 / C3.3 /
+C4.4 still open). The four things that can only be seen in a live
 session — deny refusing an Edit, still refusing under bypass, carrying on after a compaction, switching pilots —
 are the MANUAL items of the acceptance script (C1.2 / C2.3 / C3.3 / C4.4). The owner fills the version numbers
 into this line once he has run them in his own pilot.
@@ -13,7 +14,7 @@ write, plus the deny rules file checked).
 
 Machine itself: 2026-09-03 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5) · git 2.51.1 · jieba 0.42.1 —
 `python -m pytest` 120 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
-(the example equipment). Build machine: Claude Code 2.1.257, codex-cli 0.152.0.
+(the example equipment). Build machine: Claude Code 2.1.259, codex-cli 0.152.0.
 
 ## Changed on 2026-09-03 (the review round, D65–D72)
 
