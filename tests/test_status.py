@@ -85,3 +85,11 @@ def test_a_stub_pre_commit_hook_is_not_reported_armed(git_repo):
     hook.write_text(real, encoding="utf-8")
     text, _ = status.panel(git_repo)
     assert "pre-commit armed" in text and "[OK] Berserk lock" in text, text
+
+
+def test_emit_tells_the_pilot_the_panel_is_not_for_the_owner(repo):
+    """Blind test 2026-09-03: both pilots pasted the boot panel and hook status into answers for the owner (D73)."""
+    r = plug(repo["root"], "status", "--emit")
+    ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert ctx.rstrip().endswith(status.PILOT_ONLY) and "never paste" in ctx
+    assert status.PILOT_ONLY not in plug(repo["root"], "status").stdout       # the human-facing panel stays clean

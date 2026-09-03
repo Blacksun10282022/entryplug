@@ -14,6 +14,10 @@ import json, os, time
 from pathlib import Path
 from . import config, shapes, search, trust
 
+# The panel is a diagnostic for the pilot. In the 2026-09-03 blind test both pilots copied it, hook and trust
+# status included, into answers meant for the owner; the panel now says who it is for (D73).
+PILOT_ONLY = "(this panel is for you, the pilot: never paste it, a hook or trust status, or index numbers into an answer for the owner)"
+
 WIDTH = 20
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
 
@@ -175,6 +179,7 @@ def run(cfg, emit=False):
             text = panel(cfg)[0]
         except Exception as e:                # never let a broken panel take the session down with it
             text = "ENTRY PLUG — INSERTION SEQUENCE\n[NG] panel ............... could not be built (%s: %s)" % (type(e).__name__, e)
+        text += "\n" + PILOT_ONLY                  # D73: pilots pasted this panel into answers for the owner
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}, ensure_ascii=False))
         return 0
     text, code = panel(cfg)
