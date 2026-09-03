@@ -1,11 +1,12 @@
 # The sortie lock (prohibition ②): a PreToolUse hook — never act outward in the owner's name without asking.
 # What: read the hook's JSON (tool_name · tool_input · cwd), match it against plug.yaml's outbound list
-#       (a tool regex + an optional match regex over the tool input); a hit prints one line of reason on stderr,
-#       stamps .kb/hooks/outbound and exits 2 (blocked, the pilot sees the reason). No hit exits 0.
+#       (a tool regex + an optional match regex over the tool input); a hit prints the deny JSON on stdout (and
+#       the reason on stderr for humans), stamps .kb/hooks/outbound and exits 0. No hit prints nothing.
 # In:   the hook JSON on stdin; PLUG_ROOT, or walk up from cwd looking for plug.yaml.
 # Out:  a deny decision both pilots honour — `hookSpecificOutput.permissionDecision: "deny"` with a non-empty
-#       `permissionDecisionReason` on stdout — plus the exit code each one needs: Claude Code blocks on exit 2
-#       (with the reason on stderr), Codex blocks on the JSON but only from a process that exits 0 (D56).
+#       `permissionDecisionReason` on stdout, from a process that exits 0. One decision, one exit code (D65): the
+#       earlier per-pilot exit code keyed on `tool_use_id`, which Claude Code's payload carries too, so the exit-2
+#       branch never ran in production and the self-tests only ever exercised it.
 # Not:  never rewrites the tool input (updatedInput is forbidden outright); never reads content; a missing
 #       plug.yaml or broken JSON passes through (hooks are fail-open by design; the second layer is simply not
 #       giving the pilot tools that can reach outward).
@@ -42,14 +43,6 @@ def match(rules, tool_name, tool_input):
     return None
 
 
-def codex_payload(data):
-    """Codex's hook payload carries turn_id / tool_use_id; Claude Code's does not. Discriminate on the payload and
-    never on the environment — CODEX_* and CLAUDE_CODE_* both leak in when one harness launches the other, and this
-    decision must not depend on who started whom. The bias is deliberate: mistaking Claude for Codex still blocks
-    (Claude honours the same deny JSON), while mistaking Codex for Claude would exit 2 and let the call through."""
-    return any(k in data for k in ("turn_id", "tool_use_id"))
-
-
 def main():
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding="utf-8")
@@ -74,10 +67,8 @@ def main():
     print(json.dumps({"hookSpecificOutput": {"hookEventName": data.get("hook_event_name") or "PreToolUse",
                                              "permissionDecision": "deny", "permissionDecisionReason": msg}},
                      ensure_ascii=False))     # the reason must be non-empty or the deny is rejected as invalid
-    if codex_payload(data):
-        return 0                              # Codex reads that JSON only from a process that exits 0 (D56)
-    print(msg, file=sys.stderr)               # Claude Code: exit 2 + stderr is its blocking channel
-    return 2
+    print(msg, file=sys.stderr)               # for the human reading a log; the decision above is what the pilots read
+    return 0                                  # both pilots honour the deny JSON from a process that exits 0 (D65)
 
 
 if __name__ == "__main__":

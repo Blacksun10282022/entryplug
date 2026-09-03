@@ -175,3 +175,21 @@ def test_the_shipped_map_templates_do_not_trip_their_own_check(repo):
     for rel in ("pilots/codex/AGENTS.md", "pilots/claude-code/CLAUDE.md"):
         assert not MAP_LIE.search((ROOT / rel).read_text(encoding="utf-8")), rel
     assert MAP_LIE.search(LYING_MAP)                      # the pattern is not vacuous
+
+
+def test_untracked_equipment_check_is_skipped_not_executed(git_repo):
+    """Equipment checks run on every commit with the owner's full environment, and pre-commit only inspects the
+    paths being committed — so a checks/*.py merely present in the working tree ran without anyone approving it
+    (D70). In a git repo only a tracked, unmodified script runs; the rest is a WARNING."""
+    root = git_repo["root"]
+    marker = root / "work" / "planted.txt"
+    planted = root / "tools/sunzi/checks/zz_planted.py"
+    planted.write_text("import os, pathlib\npathlib.Path(os.environ['PLUG_ROOT'], 'work', 'planted.txt').write_text('ran')\n", encoding="utf-8")
+    r = run(git_repo)
+    assert not marker.exists(), "an untracked check must not execute"
+    assert any(f["code"] == "tool_check" and "skipped" in f["msg"] and "zz_planted" in f["file"] for f in r["warnings"]), codes(r, "warnings")
+    tracked = root / "tools/sunzi/checks/outline_refs.py"
+    tracked.write_text(tracked.read_text(encoding="utf-8") + "\nprint('edited but not committed')\n", encoding="utf-8")
+    r = run(git_repo)
+    assert any(f["code"] == "tool_check" and "uncommitted" in f["msg"] for f in r["warnings"]), codes(r, "warnings")
+    assert not any("edited but not committed" in f["msg"] for f in r["warnings"] + r["errors"])

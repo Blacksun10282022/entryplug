@@ -18,13 +18,15 @@ DEFAULTS = {
     "self": "self", "proposals": "proposals", "index": ".kb/index.sqlite",
     "index_md": "index.md", "numbers": "self/数字.md", "hooks": ".kb/hooks", "pin": ".kb/pin.md",
     "language": "中文", "pilots": {"claude-code": {"skills": ".claude/skills"}, "codex": {"skills": ".agents/skills"}},
-    "protected": ["self/RULES.md", "self/facts/**", "tools/**"],
+    "protected": ["self/RULES.md", "self/facts/**", "tools/**", "plug.yaml"],   # the file that defines the lock is under it
     "unprotected": ["**/corpus/**", "work/**", "workshop/**"],
     "outbound": [], "tools": [], "exclude": [], "protect": [], "corpus": [],
 }
 PROPOSAL_DIRS = ("pending", "rejected", "applied", "tools")
 FREE_ZONES = ("work", "workshop")          # products / development: never protected, never indexed
 USER_SKILLS = {"claude-code": "~/.claude/skills", "codex": "~/.agents/skills"}
+# Every tool that can run a command or publish; a tool outside the matcher never starts the hook (D65).
+MATCHER, CODEX_MATCHER = "Bash|PowerShell|WebFetch|Artifact|mcp__.*", "Bash|PowerShell|shell|mcp__.*"
 PLUG_OFF = ".plug-off"
 
 

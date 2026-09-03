@@ -11,7 +11,7 @@ def install(root, deny=True):
     hook.write_text("#!/bin/sh\nexec \"%s\" \"%s\"\n" % (sys.executable.replace("\\", "/"), str(GATE).replace("\\", "/")), encoding="utf-8")
     if deny:
         (root / ".claude").mkdir(exist_ok=True)
-        rules = ["Edit(//c/x/self/RULES.md)", "Edit(//c/x/self/facts/**)", "Edit(//c/x/tools/**)", "Read(//c/x/.kb/hooks/**)"]
+        rules = ["Edit(//c/x/self/RULES.md)", "Edit(//c/x/self/facts/**)", "Edit(//c/x/tools/**)", "Edit(//c/x/.kb/hooks/**)"]
         (root / ".claude/settings.json").write_text(json.dumps({"permissions": {"deny": rules}}), encoding="utf-8")
 
 
@@ -25,8 +25,7 @@ def test_contact_all_green_both_pilots(git_repo):
         assert lines[0].startswith("first contact · %s · harness " % pilot)
         assert [l[:1] for l in lines[1:5]] == ["①", "②", "③", "④"] and all(" OK " in l for l in lines[1:5])
         assert "Chinese query" in lines[2] and "hit" in lines[2]
-        blocked = "exit 2" if pilot == "claude-code" else "deny decision honoured"   # D56: one deny, two exit codes
-        assert blocked in lines[3], lines[3]
+        assert "denied (Bash · PowerShell · mcp" in lines[3], lines[3]      # D65: one deny, exit 0, the real tool names
         assert lines[-1] == "first contact, nothing wrong"
     assert "Codex has no permissions.deny" in r.stdout
     assert "first contact codex" in git_repo["numbers_path"].read_text(encoding="utf-8")
@@ -69,17 +68,18 @@ def test_contact_step_four_does_not_claim_deny_is_in_force(git_repo):
     step4 = r.stdout.splitlines()[4]
     assert "written, NOT proven in force" in step4 and "project root is this repo" in step4, step4
 def test_contact_reports_a_real_block_on_both_pilots(git_repo):
-    """The sortie lock blocks on both sides (D56): Claude Code on exit 2, Codex on the deny JSON. Step 3 says so,
-    and on the Codex side it also prints the owner's approval_policy / sandbox_mode — the layer on top."""
+    """The sortie lock blocks on both sides with one decision (D65): the deny JSON from a process that exits 0,
+    probed with each pilot's real payload shape and with every shell tool. Step 3 says so, and on the Codex side it
+    also prints the owner's approval_policy / sandbox_mode — the layer on top."""
     from entryplug import contact
     root = git_repo["root"]
     install(root)
     c = plug(root, "check", "--contact", "codex")
     step3 = c.stdout.splitlines()[3]
-    assert "blocked (deny decision honoured)" in step3, step3
+    assert "denied (Bash · PowerShell · mcp" in step3 and "exit 0" in step3, step3
     assert "only RECORDS" not in step3 and "cannot veto" not in step3, step3
     assert "approval_policy=" in step3 and "sandbox_mode=" in step3, step3
     k = plug(root, "check", "--contact", "claude-code")
-    assert "blocked (exit 2)" in k.stdout.splitlines()[3]
+    assert "the payload shape Claude Code sends" in k.stdout.splitlines()[3]
     posture = contact.codex_posture()
     assert "approval_policy=" in posture or "not found" in posture or "unreadable" in posture

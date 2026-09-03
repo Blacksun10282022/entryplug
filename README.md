@@ -27,11 +27,13 @@ equipment, do not build new equipment — write a refit request) = git pre-commi
 what the deny half is worth: the rules live in `<content-repo>/.claude/settings.json` and bind a session whose
 **project root is that repo**. An agent working from somewhere else — another project, a machine repo, a scratch
 directory — edits those files with nothing in its way, and only pre-commit stops the result from landing. That is
-why pre-commit is the airtight layer and deny is the polite one. The
+why pre-commit is the hard layer and deny is the polite one. Hard, not airtight: `--no-verify` and `KB_APPROVE=1`
+are the two documented ways round it, both leave a trace, and both are the owner's to use. The
 **sortie lock** (nothing goes out in the owner's name — ask first) = a PreToolUse hook, one list shared by Claude
-Code and Codex, and it really blocks on both. The decision is the same JSON either way —
-`hookSpecificOutput.permissionDecision: "deny"` with a non-empty `permissionDecisionReason` — but the exit code is
-not: Claude Code blocks on exit 2, while Codex honours the deny only from a process that exits 0 (D56). Codex's own
+Code and Codex, and it really blocks on both. The decision is one JSON line on stdout from a process that exits 0 —
+`hookSpecificOutput.permissionDecision: "deny"` with a non-empty `permissionDecisionReason` — on both pilots
+(D65, verified live on each). The hook is wired to every tool that can run a command or publish: Bash, PowerShell,
+WebFetch, Artifact and all MCP tools. Codex's own
 `approval_policy` and `sandbox_mode` sit on top as a second layer; `plug check --contact codex` prints both so you
 can see what else is or is not in the way. Plus a compaction pin and a Stop-hook record reminder, both reminder-level.
 
@@ -62,7 +64,8 @@ catches the one stale claim that misleads a pilot about its own limits (code `ma
 the diff.
 
 Build your own content repo the way `example-tool/` is built (`plug.yaml` is the only place a path may appear),
-then run `plug init --pilot both` inside it to install the gates and the pilot shells, then `plug index`,
+then run `plug init --pilot both` inside it to install the gates and the pilot shells (re-run it after upgrading the
+machine: it also refreshes the hook matcher of an existing install), then `plug index`,
 `plug status`, and `plug check --contact claude-code` (or `codex`) with all four steps green. Integration details
 are in `pilots/claude-code/` and `pilots/codex/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`,
 and every call made along the way — including the whole W2 round, D36–D44 — in `docs/DECISIONS.md`.

@@ -25,6 +25,7 @@ from . import config, index
 
 REPO, PY = Path(__file__).resolve().parents[1], Path(sys.executable).as_posix()
 SELF_PROTECT = ["self/RULES.md", "self/facts/**", "self/style.md", "plug.yaml"]
+MATCHER, CODEX_MATCHER = config.MATCHER, config.CODEX_MATCHER    # the tools the pilots really expose (D65)
 TOOL_PROTECT = ["SKILL.md", "READING.md", "dict/**", "playbooks/**", "materials/**", "checks/**"]
 ZONE_NOTE = {"work": "Products land here, one directory per equipment. Not indexed, not protected, freely writable.\n",
              "workshop": "Where new equipment is built before it is registered in plug.yaml. Not indexed, not protected.\n"}
@@ -102,7 +103,7 @@ def codex_hooks(cfg):
     gate = lambda s, *a: codex_cmd(PY, (REPO / "gates" / s).as_posix(), *a)
     cli = codex_cmd(PY, "-m", "entryplug.cli", "--root", cfg["root"].as_posix(), "status", "--emit")
     return {"hooks": {
-        "PreToolUse": [{"matcher": "Bash|shell|mcp__.*", "hooks": [{"type": "command", "command": gate("outbound.py"), "timeout": 30}]}],
+        "PreToolUse": [{"matcher": CODEX_MATCHER, "hooks": [{"type": "command", "command": gate("outbound.py"), "timeout": 30}]}],
         "PreCompact": [{"hooks": [{"type": "command", "command": gate("precompact.py"), "timeout": 30}]}],
         "SessionStart": [{"hooks": [{"type": "command", "command": cli, "timeout": 30}]}],
         "Stop": [{"hooks": [{"type": "command", "command": gate("stop.py"), "timeout": 20}]}],
@@ -113,7 +114,7 @@ def merge_hooks(cfg):
     """Five hooks merged into `hooks`, returned as a mutator: sortie lock (PreToolUse) · compaction pin
     (PreCompact) · pin re-injection and the boot panel (SessionStart) · record reminder (Stop). A command that is
     already there is not added twice, and nothing else in the file is touched."""
-    want = {"PreToolUse": [{"matcher": "Bash|WebFetch|mcp__.*", "hooks": [{"type": "command", "command": hook_cmd("outbound.py"), "timeout": 30}]}],
+    want = {"PreToolUse": [{"matcher": MATCHER, "hooks": [{"type": "command", "command": hook_cmd("outbound.py"), "timeout": 30}]}],
             "PreCompact": [{"hooks": [{"type": "command", "command": hook_cmd("precompact.py"), "timeout": 30}]}],
             "SessionStart": [{"matcher": "compact", "hooks": [{"type": "command", "command": hook_cmd("precompact.py", "--emit"), "timeout": 30}]},
                              {"matcher": "startup|resume|clear", "hooks": [{"type": "command", "command": cli_cmd(cfg, "status", "--emit"), "timeout": 30}]}],
@@ -123,8 +124,11 @@ def merge_hooks(cfg):
         for event, groups in want.items():
             have = hooks.setdefault(event, [])
             for g in groups:
-                if not any(h.get("command") == g["hooks"][0]["command"] for x in have for h in x.get("hooks", [])):
+                mine = [x for x in have if any(h.get("command") == g["hooks"][0]["command"] for h in x.get("hooks", []))]
+                if not mine:
                     have.append(g)
+                elif "matcher" in g and mine[0].get("matcher") != g["matcher"]:
+                    mine[0]["matcher"] = g["matcher"]      # a widened matcher must reach installs made earlier (D65)
     return mutate
 
 

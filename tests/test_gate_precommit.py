@@ -17,7 +17,7 @@ def run_gate(root, staged, approve=False):
 
 def test_protected_paths_refused_one_line_reason(repo):
     root = repo["root"]
-    for path in ("self/RULES.md", "self/facts/example.md", "tools/sunzi/dict/shi.md", "tools/sunzi/SKILL.md", "tools/sunzi/materials/x.md"):
+    for path in ("self/RULES.md", "self/facts/example.md", "tools/sunzi/dict/shi.md", "tools/sunzi/SKILL.md", "tools/sunzi/materials/x.md", "plug.yaml"):
         r = run_gate(root, [path])
         assert r.returncode == 1 and r.stderr.count("\n") == 1 and "berserk lock" in r.stderr and path in r.stderr, (path, r.stderr)
     assert (repo["hooks_dir"] / "precommit").exists()
@@ -77,3 +77,41 @@ def test_protect_list_extends_the_gate(repo):
     r = run_gate(repo["root"], ["tools/sunzi/kit/resume.md"])
     assert r.returncode == 1 and "berserk lock" in r.stderr
     assert run_gate(repo["root"], ["work/sunzi/kit/resume.md"]).returncode == 0
+
+
+def real_hook(root):
+    hook = root / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexec \"%s\" \"%s\"\n" % (sys.executable.replace("\\", "/"), str(GATE).replace("\\", "/")), encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k not in ("KB_APPROVE", "PLUG_STAGED", "PLUG_ROOT")}
+    return lambda *a, **k: subprocess.run(["git", "-c", "commit.gpgsign=false", *a], cwd=str(root), capture_output=True, text=True, encoding="utf-8", env=dict(env, **k.get("env", {})))
+
+
+def test_non_ascii_protected_path_is_refused_under_default_quotepath(git_repo):
+    """git's default core.quotePath=true prints a Chinese file name as an octal escape; the old --name-only read
+    matched that against no pattern, so every non-ASCII protected file was silently unprotected (D67). -z fixes it."""
+    root = git_repo["root"]
+    g = real_hook(root)
+    fact = root / "self/facts/事实.md"
+    fact.write_text("---\ntitle: 事实\n---\n一行事实\n", encoding="utf-8")
+    g("add", "--", "self/facts/事实.md")
+    r = g("-c", "core.quotePath=true", "commit", "-q", "-m", "sneak a fact in")
+    assert r.returncode != 0 and "berserk lock" in r.stderr and "事实" in r.stderr, r.stderr
+
+
+def test_plug_staged_and_plug_root_cannot_reach_a_real_commit(git_repo):
+    """Two environment variables used to replace what the gate looked at: PLUG_STAGED stood in for the index (an
+    empty value = nothing staged), PLUG_ROOT pointed it at another repo's plug.yaml. Inside a real commit git sets
+    GIT_INDEX_FILE, and the gate now ignores both (D66)."""
+    root = git_repo["root"]
+    g = real_hook(root)
+    rules = root / "self/RULES.md"
+    rules.write_text(rules.read_text(encoding="utf-8") + "- J9 · sneaked [2026-09]\n", encoding="utf-8")
+    g("add", "self/RULES.md")
+    r = g("commit", "-q", "-m", "empty staged list", env={"PLUG_STAGED": " "})
+    assert r.returncode != 0 and "berserk lock" in r.stderr, r.stderr
+    other = root.parent / "other"
+    other.mkdir(exist_ok=True)
+    (other / "plug.yaml").write_text("shape_version: 1\nprotected: []\n", encoding="utf-8")
+    r = g("commit", "-q", "-m", "someone else's plug.yaml", env={"PLUG_ROOT": str(other)})
+    assert r.returncode != 0 and "berserk lock" in r.stderr, r.stderr
+    assert "sneaked" not in g("show", "HEAD:self/RULES.md").stdout

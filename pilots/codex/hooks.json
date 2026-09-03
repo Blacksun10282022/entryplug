@@ -1,14 +1,14 @@
 {
   "_readme": [
     "Codex hook config (merge into ~/.codex/hooks.json, or the repo-level file). Same sortie-lock list (plug.yaml: outbound), same script gates/outbound.py.",
-    "Codex hook semantics match Claude Code's: PreToolUse exit 2 blocks, hooks are fail-open, the default timeout is 600 s, and each hook has to be trusted once by hand. Field names follow the Codex version you installed (written 2026-08; the harness stamp is in STATUS.md).",
+    "A PreToolUse hook blocks by printing the deny JSON (hookSpecificOutput.permissionDecision: deny, non-empty reason) and exiting 0 — on both pilots (D65). Hooks are fail-open; each Codex hook has to be trusted once by hand, and again after every change (D58). Prefer `plug init`: it writes the bare, space-separated command form Codex needs (D53).",
     "The Stop hook is the record reminder: it never blocks and always exits 0.",
     "Replace //c/<entryplug-repo> with wherever you cloned entryplug, and //c/<content-repo> with the content repo."
   ],
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|shell|mcp__.*",
+        "matcher": "Bash|PowerShell|shell|mcp__.*",
         "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/outbound.py\"", "timeout": 30 }]
       }
     ],

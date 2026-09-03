@@ -32,5 +32,8 @@ any search result.
 
 - deny only understands `Edit()` / `Read()`; a `Write()` rule is never checked. Never deny `Read(self/RULES.md)` —
   the pilot has to read the rules.
-- deny applies under bypassPermissions too, but it cannot stop `python -c` writing directly; the backstop is pre-commit.
+- deny applies under bypassPermissions too — verified live on 2026-09-02, Edit and Write both refused — but it
+  cannot stop `python -c` writing directly; the backstop is pre-commit.
+- The sortie-lock matcher must name every tool that can run a command or publish: `Bash|PowerShell|WebFetch|Artifact|mcp__.*`.
+  A tool outside the matcher never starts the hook, and nothing reports that.
 - Run `plug check --contact claude-code` the day you upgrade Claude Code; run `tests/acceptance.py` when you change model.

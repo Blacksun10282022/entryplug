@@ -1,6 +1,7 @@
 # STATUS
 
-Last verified on a real Claude Code vX / Codex vY: **not yet**. The four things that can only be seen in a live
+Last verified on a real Claude Code 2.1.257 / codex-cli 0.152.0: **2026-09-02** (C1.2 deny under bypass: refused; the sortie
+lock in both pilots: refused; C2.3 / C3.3 / C4.4 still open). The four things that can only be seen in a live
 session — deny refusing an Edit, still refusing under bypass, carrying on after a compaction, switching pilots —
 are the MANUAL items of the acceptance script (C1.2 / C2.3 / C3.3 / C4.4). The owner fills the version numbers
 into this line once he has run them in his own pilot.
@@ -10,9 +11,20 @@ reads). First contact is four-for-four green on both sides against a temporary c
 (manual mirrored · Chinese MCP query non-zero · fake outbound action blocked · pre-commit refusing a protected
 write, plus the deny rules file checked).
 
-Machine itself: 2026-09-01 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5) · git 2.51.1 · jieba 0.42.1 —
-`python -m pytest` 83 passed; `python tests/acceptance.py` 22 automated items PASS, 0 FAIL, 4 MANUAL
-(the example equipment).
+Machine itself: 2026-09-03 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5) · git 2.51.1 · jieba 0.42.1 —
+`python -m pytest` 120 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
+(the example equipment). Build machine: Claude Code 2.1.257, codex-cli 0.152.0.
+
+## Changed on 2026-09-03 (the review round, D65–D72)
+
+A full review on 2026-09-02 found eight defects that a green test suite and a green acceptance script had walked
+past, all in the locks' real strength: the sortie lock never saw the `PowerShell` tool, its self-tests exercised a
+branch production never takes, pre-commit could not see a Chinese file name under git's default `quotePath`, two
+environment variables replaced what it looked at, a stub hook read as armed, `plug apply` swept the whole index
+into its commit, an untracked equipment check ran on every commit, and `plug.yaml` was not in the default protected
+list. Each fix landed with a test that fails on the old code; the decisions are D65–D72. Verified live the same day
+in `claude -p --dangerously-skip-permissions` and `codex exec` sessions: deny refuses Edit and Write under bypass;
+the sortie lock refuses Bash curl and a subagent's Bash curl; Codex refuses curl and git push.
 
 ## Changed on 2026-09-01 (the W2 machine-side round, before installing into a content repo)
 

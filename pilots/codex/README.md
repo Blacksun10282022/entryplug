@@ -80,9 +80,9 @@ It blocks by **deciding**, not by failing. Print this on stdout and exit **0**:
 
 - `permissionDecisionReason` must be non-empty; Codex rejects a deny without one, and the reason is what the
   model is shown ("the command did not execute because …").
-- **Exit 0.** A hook that exits non-zero has its stdout ignored, so `exit 2` — Claude Code's blocking channel —
-  silently disables the deny on this side. `gates/outbound.py` prints the same JSON for both pilots and chooses
-  the exit code from the payload (`turn_id` present ⇒ Codex ⇒ exit 0).
+- **Exit 0.** A hook that exits non-zero has its stdout ignored, so `exit 2` silently disables the deny on this
+  side. `gates/outbound.py` prints the same JSON for both pilots and exits 0 for both — Claude Code honours the
+  exit-0 deny too, verified live (D65); it no longer guesses the pilot from the payload.
 - Three forms do **not** work, and Codex says so in its own error strings: `continue: false`, `stopReason`, and
   relying on `async: false`. If you are testing a hook and nothing blocks, check that first.
 - `PermissionRequest` is a separate event for the approval flow; the sortie lock does not need it.

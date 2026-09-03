@@ -24,15 +24,21 @@ pilots:                         # plug index mirrors every SKILL.md into these d
   claude-code: {skills: .claude/skills, user_skills: "~/.claude/skills"}
   codex: {skills: .agents/skills, user_skills: "~/.agents/skills"}
 
-outbound:                       # sortie lock: a hit is PreToolUse exit 2 (tool = regex on the tool name; match = regex on the tool input JSON)
-  - tool: "^Bash$"
-    match: "(?i)\\b(curl|wget|ssh|scp|sendmail|git push)\\b"
+outbound:                       # sortie lock: a hit is a deny decision on stdout (tool = regex on the tool name; match = regex on the command)
+  - tool: "^(Bash|PowerShell|shell)$"          # every shell tool the pilots expose; PowerShell is a real tool on Windows
+    match: "(?i)\\b(curl|wget|ssh|scp|sendmail|Invoke-WebRequest|Invoke-RestMethod)\\b"
+  - tool: "^(Bash|PowerShell|shell)$"          # git [options] push — options may sit between; `git stash push` and a commit message saying push do not match
+    match: "(?i)\\bgit\\b(?:\\s+-\\S+(?:\\s+[^-\\s]\\S*)?)*\\s+push\\b"
+  - tool: "^(Bash|PowerShell|shell)$"          # gh as a command, not the two letters inside a path
+    match: "(?im)(?:^|[;&|(]\\s*)gh\\s"
+  - tool: "^Artifact$"                         # publishing a page is an outward action, whatever it contains
   - tool: "(?i)^mcp__.*(send|post|submit|pay|email|message|publish)"
 
 protected:                      # berserk lock: committing these needs KB_APPROVE=1, which only plug apply sets.
   - self/RULES.md               # Anything under tools/ that is not registered above is NOT protected.
   - self/facts/**
   - tools/**
+  - plug.yaml                   # the lock must cover the file that defines it (D71)
 unprotected:                    # the corpus is appended to freely; work/ and workshop/ are the free zones
   - "**/corpus/**"
   - "work/**"

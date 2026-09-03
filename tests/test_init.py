@@ -232,3 +232,22 @@ def test_editing_a_trusted_codex_hook_makes_it_untrusted_again(git_repo, tmp_pat
     assert msg and "changed since they were trusted" in msg, msg
     assert msg.startswith("1 of the "), msg
     assert "[NG] Sortie lock" in plug(root, "status", env=env).stdout
+
+
+def test_init_updates_the_matcher_of_an_earlier_install(git_repo):
+    """merge_hooks used to dedupe by command only, so a widened matcher never reached a repo installed earlier:
+    the PowerShell gap would have stayed open on every existing install (D65)."""
+    root = git_repo["root"]
+    (root / ".claude").mkdir(exist_ok=True)
+    old = {"hooks": {"PreToolUse": [{"matcher": "Bash|WebFetch|mcp__.*", "hooks": [{"type": "command", "command": init.hook_cmd("outbound.py"), "timeout": 30}]}]}}
+    (root / ".claude/settings.json").write_text(json.dumps(old), encoding="utf-8")
+    assert plug(root, "init", "--pilot", "claude-code").returncode == 0
+    s = json.loads((root / ".claude/settings.json").read_text(encoding="utf-8"))
+    groups = s["hooks"]["PreToolUse"]
+    assert len(groups) == 1 and groups[0]["matcher"] == init.MATCHER, groups
+    for tool in ("PowerShell", "Artifact", "Bash"):
+        assert tool in init.MATCHER
+    codex = json.loads((root / ".codex/hooks.json").read_text(encoding="utf-8")) if (root / ".codex/hooks.json").exists() else None
+    assert plug(root, "init", "--pilot", "codex").returncode == 0
+    codex = json.loads((root / ".codex/hooks.json").read_text(encoding="utf-8"))
+    assert "PowerShell" in codex["hooks"]["PreToolUse"][0]["matcher"]

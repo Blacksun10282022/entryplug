@@ -6,13 +6,15 @@ Four scripts. One hook, one verb; one line of reason; each stamps `.kb/hooks/<na
 | script | prohibition | mounted on | hardness |
 |---|---|---|---|
 | `precommit.py` | ① berserk lock: do not change the rules or the equipment, do not build new equipment — write a refit request | the content repo's `.git/hooks/pre-commit` (template `hooks/pre-commit`) | hardest: across harnesses, across languages, it catches a script writing directly |
-| `outbound.py` | ② sortie lock: nothing goes out in the owner's name, ask first | PreToolUse (Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `.codex/hooks.json`), one list in `plug.yaml: outbound` | **Blocks on both** — one deny decision, two exit codes: Claude Code needs exit 2, Codex reads the same JSON but only from a process that exits 0 (D56). Hooks are still fail-open if the script never runs |
+| `outbound.py` | ② sortie lock: nothing goes out in the owner's name, ask first | PreToolUse (Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `.codex/hooks.json`), one list in `plug.yaml: outbound` | **Blocks on both** — one deny decision on stdout, exit 0, read by both pilots (D65). Hooks are still fail-open if the script never runs, and a tool name outside the matcher never reaches it |
 | `precompact.py` | (not a prohibition) the compaction pin | PreCompact + SessionStart(compact) | five facts, nothing else |
 | `stop.py` | (not a prohibition) the record reminder | Stop | reminder only: it never blocks, it never writes, it exits 0 always |
 
 By hardness: pre-commit > `permissions.deny` (Claude Code only; `Edit(path)` form, see
 `pilots/claude-code/settings.template.json`) > hooks. Native Windows has no sandbox, so deny cannot stop a
-subprocess writing directly — which is why pre-commit is the only airtight layer.
+subprocess writing directly — which is why pre-commit is the hard layer. Hard, not airtight: `--no-verify` and
+`KB_APPROVE=1` go round it, on purpose and visibly; the test seams `PLUG_STAGED` / `PLUG_ROOT` no longer do
+(D66), a Chinese file name no longer slips past it (D67), and a stub hook no longer reads as armed (D68).
 
 Deny has a second, quieter limit: those rules bind **a session whose project root is the content repo**. Open the
 same files from a session rooted anywhere else and deny never sees the edit; the file changes, and the refusal

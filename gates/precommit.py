@@ -2,8 +2,9 @@
 # What: a commit that touches a protected path (by default self/RULES.md · self/facts/** · tools/** minus the
 #       corpus; see plug.yaml protected/unprotected) without KB_APPROVE=1 is refused with one line of reason.
 #       Every other commit: rebuild the index, then check must report 0 ERROR to pass. Stamps .kb/hooks/precommit.
-# In:   the git index (git diff --cached --name-only); tests and first contact can pass PLUG_STAGED instead
-#       (newline-separated paths).
+# In:   the git index (git diff --cached --name-only -z); tests and first contact can pass PLUG_STAGED instead
+#       (newline-separated paths) — honoured only outside a real git commit (GIT_INDEX_FILE unset). PLUG_ROOT is
+#       ignored here: the repo is the one git is committing in.
 # Out:  exit 0 = pass, 1 = refused; the reason is one line on stderr. No plug.yaml is also a refusal — this
 #       gate is the fail-closed one.
 # Not:  never reads or edits content; never asks who is committing (the owner is no exception: approving is
@@ -23,12 +24,25 @@ from entryplug import config  # noqa: E402
 
 
 def staged(root):
+    """The paths this commit would write. PLUG_STAGED (a test seam) is honoured only when git is NOT running us —
+    git sets GIT_INDEX_FILE for every hook, so inside a real commit the variable is ignored (D66). `-z` asks git
+    for raw, NUL-separated names: with the default core.quotePath a non-ASCII path came back octal-escaped and
+    matched no protected pattern, so every Chinese file name was silently unprotected (D67)."""
     env = os.environ.get("PLUG_STAGED")
-    if env is not None:
+    if env is not None and "GIT_INDEX_FILE" not in os.environ:
         return [l.strip().replace("\\", "/") for l in env.splitlines() if l.strip()]
-    r = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACMRD"], cwd=str(root),
+    r = subprocess.run(["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRD"], cwd=str(root),
                        capture_output=True, text=True, encoding="utf-8")
-    return [l.strip() for l in r.stdout.splitlines() if l.strip()]
+    return [l for l in r.stdout.split("\0") if l.strip()]
+
+
+def repo_root():
+    """The repo git is committing in. PLUG_ROOT is deliberately NOT consulted here: pointed at another repo it made
+    this gate judge somebody else's staged files under somebody else's plug.yaml (D66). cwd is the repo's top level
+    when git runs a hook; tests and first contact run the script with cwd set the same way."""
+    r = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, encoding="utf-8")
+    top = r.stdout.strip()
+    return top if r.returncode == 0 and top and (Path(top) / "plug.yaml").exists() else config.find_root()
 
 
 def stamp(cfg, name):
@@ -40,7 +54,7 @@ def main():
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding="utf-8")
     try:
-        cfg = config.load(os.environ.get("PLUG_ROOT") or config.find_root())
+        cfg = config.load(repo_root())
     except FileNotFoundError as e:
         print("berserk lock: %s — a repo without plug.yaml should not have this hook; fix the config first" % e, file=sys.stderr)
         return 1

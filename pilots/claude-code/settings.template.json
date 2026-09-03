@@ -27,7 +27,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|WebFetch|mcp__.*",
+        "matcher": "Bash|PowerShell|WebFetch|Artifact|mcp__.*",
         "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/outbound.py\"", "timeout": 30 }]
       }
     ],

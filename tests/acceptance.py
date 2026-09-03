@@ -87,6 +87,9 @@ def c1(root):
     deny = json.loads((ROOT / "pilots/claude-code/settings.template.json").read_text(encoding="utf-8"))["permissions"]["deny"]
     ok = all(d.startswith(("Edit(", "Read(")) for d in deny) and any("self/RULES.md" in d and d.startswith("Edit(") for d in deny)
     item("C1.1", "the deny template uses only Edit()/Read() and covers self/RULES.md (Write() is never checked)", ok, "%d rules" % len(deny))
+    m = json.loads((ROOT / "pilots/claude-code/settings.template.json").read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]["matcher"]
+    item("C1.6", "the sortie-lock matcher names every shell and publishing tool the pilots expose (Bash, PowerShell, Artifact)",
+         all(t in m for t in ("Bash", "PowerShell", "Artifact")), m)
     item("C1.2", "editing self/RULES.md inside Claude Code → deny refuses; rerun under bypassPermissions and it still refuses", manual=True,
          detail="try it in a real session once .claude/settings.json is installed, once in each mode")
     rules = root / "self/RULES.md"
@@ -143,7 +146,8 @@ def c2(root):
     pre = gate("precommit.py", root, None, {"PLUG_STAGED": "self/RULES.md"})
     (root / ".plug-off").unlink()
     item("C2.6", ".plug-off lets the sortie lock through but leaves the berserk lock exactly where it was",
-         out.returncode == 0 and pre.returncode == 1 and "berserk lock" in pre.stderr, "outbound %d · pre-commit %d" % (out.returncode, pre.returncode))
+         out.returncode == 0 and "permissionDecision" not in out.stdout and pre.returncode == 1 and "berserk lock" in pre.stderr,
+         "outbound passed through (no decision) · pre-commit %d" % pre.returncode)
 
 
 def c3(root):

@@ -27,7 +27,7 @@ def test_all_systems_nominal_after_init(git_repo):
     assert r.returncode == 0, r.stdout + r.stderr
     lines = r.stdout.splitlines()
     assert all(l.startswith("[OK]") for l in lines[1:6]), lines
-    assert "deny armed" in lines[3] and "pre-commit armed" in lines[3]
+    assert "deny written" in lines[3] and "pre-commit armed" in lines[3]     # written, never "in force": D49
     assert lines[-1].startswith("SYNC RATE 100.0% — ALL SYSTEMS NOMINAL.") and lines[-1].endswith("LIFT OFF.")
 
 
@@ -70,3 +70,18 @@ def test_emit_payload_is_session_start_context(repo, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
     assert "INSERTION SEQUENCE" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_a_stub_pre_commit_hook_is_not_reported_armed(git_repo):
+    """The old check was `"precommit" in text`: a hook replaced by `# precommit disabled` + `exit 0` still read as
+    armed on the boot panel (D68). The real hook has exactly one executable line, exec'ing gates/precommit.py."""
+    root = git_repo["root"]
+    assert plug(root, "init", "--pilot", "both").returncode == 0
+    hook = root / ".git/hooks/pre-commit"
+    real = hook.read_text(encoding="utf-8")
+    hook.write_text("#!/bin/sh\n# precommit disabled\nexit 0\n", encoding="utf-8")
+    text, _ = status.panel(git_repo)
+    assert "pre-commit is NOT the plug init hook" in text and "[NG] Berserk lock" in text, text
+    hook.write_text(real, encoding="utf-8")
+    text, _ = status.panel(git_repo)
+    assert "pre-commit armed" in text and "[OK] Berserk lock" in text, text

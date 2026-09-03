@@ -6,10 +6,10 @@
 # Out:  run() → dict{errors, warnings, header, moved, records, proposals, materials, entries, orphans, numbers}.
 # Not:  never edits content (its only writes are an expired proposal and the numbers page); no score; no LLM.
 # Who:  cli (plug check) · gates/precommit (0 ERROR to pass) · apply (before and after landing) · status · tests.
-# Deps: stdlib (subprocess only to ask git and to run equipment checks) · shapes · config · numbers.
+# Deps: stdlib (subprocess only to ask git) · shapes · config · numbers · trust (runs the equipment checks).
 import hashlib, os, re, sqlite3, subprocess, sys, time
 from datetime import date
-from . import __version__, SHAPE_VERSION, config, shapes
+from . import __version__, SHAPE_VERSION, config, shapes, trust
 
 HOOKS = ("precommit", "outbound", "precompact", "stop")
 VERBS = ("index", "check", "apply", "eval", "search", "status", "init", "mcp", "hash")
@@ -22,7 +22,7 @@ DESC_ONE, DESC_TOTAL, EXPIRE_DAYS, HOOK_DAYS, NEW_DAYS = 1536, 4000, 30, 30, 30
 def git_added(root):
     """{rel: date first committed}; {} when this is not a git repo."""
     try:
-        out = subprocess.run(["git", "log", "--diff-filter=A", "--format=@%cs", "--name-only"], cwd=str(root),
+        out = subprocess.run(["git", "-c", "core.quotePath=false", "log", "--diff-filter=A", "--format=@%cs", "--name-only"], cwd=str(root),
                              capture_output=True, text=True, encoding="utf-8").stdout
     except OSError:
         return {}
@@ -231,18 +231,7 @@ def run(cfg, expire=True, tool_checks=True, today=None):
     if header["index_stale"]:
         warn("index_stale", cfg["index"], "the index is older than the content (or absent); run plug index")
     if tool_checks:
-        for t in cfg["tools"]:
-            for s in sorted((t["dir"] / "checks").glob("*.py")) if (t["dir"] / "checks").is_dir() else []:
-                rel, env = config.rel(cfg, s), dict(os.environ, PLUG_ROOT=str(root), PLUG_TOOL=t["name"], PLUG_TOOL_DIR=str(t["dir"]), PYTHONIOENCODING="utf-8")
-                try:
-                    r = subprocess.run([sys.executable, str(s)], cwd=str(root), env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
-                except subprocess.TimeoutExpired:
-                    warn("tool_check", rel, "equipment check timed out after 60 s")
-                    continue
-                for line in r.stdout.splitlines():
-                    (err if r.returncode == 2 else warn)("tool_check", rel, line.strip())
-                if r.returncode not in (0, 2):
-                    warn("tool_check", rel, "equipment check exited %d: %s" % (r.returncode, r.stderr.strip()[-160:]))
+        trust.run_checks(cfg, warn, err)             # only scripts git tracks unchanged (D70)
     from . import numbers
     out["numbers"] = numbers.page(cfg, records, today, docs, anchors, ids)
     cfg["numbers_path"].parent.mkdir(parents=True, exist_ok=True)

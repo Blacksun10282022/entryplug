@@ -156,3 +156,30 @@ def test_no_tracked_file_prints_a_chat_command_the_gate_would_refuse():
                 if "--owner" not in m.group(1) and "--dry-run" not in m.group(1):
                     bad.append("%s:%d %s" % (rel, n, line.strip()))
     assert not bad, bad
+
+
+def test_apply_commits_only_its_own_paths(git_repo):
+    """A plain `git commit` takes the whole index. Staging is not gated, so a protected edit staged beforehand rode
+    into the owner's approval commit under KB_APPROVE=1, with a subject naming only the proposal (D69)."""
+    root = git_repo["root"]
+    rules = root / "self/RULES.md"
+    rules.write_text(rules.read_text(encoding="utf-8") + "- J9 · staged by a pilot, never approved [2026-09]\n", encoding="utf-8")
+    assert git(root, "add", "self/RULES.md").returncode == 0
+    r = plug(root, "apply", PENDING)
+    assert r.returncode == 0, r.stdout + r.stderr
+    files = git(root, "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert "tools/sunzi/dict/shi.md" in files and "self/RULES.md" not in files, files
+    assert "never approved" not in git(root, "show", "HEAD:self/RULES.md").stdout
+    assert "self/RULES.md" in git(root, "diff", "--cached", "--name-only").stdout     # still staged, untouched
+
+
+def test_apply_refuses_a_target_under_dot_git(git_repo):
+    """The pre-commit hook lives in .git/hooks and is not tracked; a proposal could name it as its target and land
+    a stub with the owner's own hands (D68)."""
+    root = git_repo["root"]
+    h = apply.blob_hash((root / ".git/hooks/pre-commit").read_bytes()) if (root / ".git/hooks/pre-commit").exists() else "new"
+    p = proposal(root, "2026-09-02-hook.md", ".git/hooks/pre-commit", h, "```sh\n#!/bin/sh\nexit 0\n```")
+    for extra in ((), ("--dry-run",)):
+        r = plug(root, "apply", str(p.relative_to(root)), *extra)
+        assert r.returncode == 1 and "under .git/" in r.stdout, (extra, r.stdout)
+    assert p.exists()

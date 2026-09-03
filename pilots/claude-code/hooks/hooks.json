@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|WebFetch|mcp__.*",
+        "matcher": "Bash|PowerShell|WebFetch|Artifact|mcp__.*",
         "hooks": [
           { "type": "command", "command": "python \"${CLAUDE_PLUGIN_ROOT}/../../gates/outbound.py\"", "timeout": 30 }
         ]

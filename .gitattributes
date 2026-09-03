@@ -1,0 +1,3 @@
+# Every write in this machine uses LF (D33). Check files out the same way on every machine, so blob hashes,
+# proposal bases and the tests never depend on core.autocrlf.
+* text=auto eol=lf

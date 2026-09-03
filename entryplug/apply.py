@@ -4,7 +4,8 @@
 # In:   cfg · proposal path (relative to the content repo, or absolute). The proposal's 「改成什么」 section holds
 #       one fenced code block = the whole new file; or its first line is `retire` (D03).
 # Out:  the target file lands · the proposal moves to proposals/applied/ · one git commit (KB_APPROVE=1 is set
-#       here and nowhere else); the diff and the result go to stdout; exit code 0 / 1.
+#       here and nowhere else) holding only the landed paths (--only: anything else already staged stays
+#       staged, D69); the diff and the result go to stdout; exit code 0 / 1.
 # Not:  a base mismatch (the target has changed) is refused outright, never silently overwritten; a check ERROR
 #       rolls everything back; directories are not approved (a new equipment draft in proposals/tools/ is mounted
 #       into plug.yaml by the owner by hand). Approval is the owner's move: an agent environment is refused.
@@ -111,6 +112,9 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
     if root not in target.parents or target.is_dir():
         print("apply: target must be a file inside the content repo: %s" % p["fm"]["target"])
         return 1
+    if ".git" in target.relative_to(root).parts:           # the berserk lock itself lives there (D68)
+        print("apply: target is under .git/, which no proposal may touch: %s" % p["fm"]["target"])
+        return 1
     trel, base = config.rel(cfg, target), str(p["fm"]["base"]).strip()
     current = target.read_bytes() if target.exists() else None
     if current is None and base not in ("new", "-"):
@@ -164,8 +168,12 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
         return 0
     for path in paths:                       # add one at a time: a path that never existed would fail the whole add
         _git(root, "add", "-A", "--", path, env=env)
+    staged = [x for x in _git(root, "diff", "--cached", "--name-only", "-z", "--no-renames", "--", *paths).stdout.split("\0") if x]
     msg = "apply: %s %s\n\nProposal: %s\nProposal-Sha: %s\n" % (action, trel, prel, psha)
-    r = _git(root, "commit", "-q", "-m", msg, env=env)
+    if not staged:                           # e.g. a proposal that was never committed: moving it stages nothing
+        print("apply: landed (%s %s) but git sees nothing to commit for it. Proposal sha %s" % (action, trel, psha))
+        return 0
+    r = _git(root, "commit", "-q", "--only", "-m", msg, "--", *staged, env=env)   # never sweep up what else is staged (D69)
     if r.returncode != 0:
         print("apply: landed but the commit failed: %s" % (r.stderr.strip() or r.stdout.strip()))
         return 1

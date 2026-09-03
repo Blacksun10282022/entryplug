@@ -12,7 +12,7 @@
 # Deps: stdlib json · sqlite3 (via search) · config · shapes.
 import json, os, time
 from pathlib import Path
-from . import config, shapes, search
+from . import config, shapes, search, trust
 
 WIDTH = 20
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
@@ -97,10 +97,10 @@ def check_atfield(cfg):
     missing = [t["name"] for t in cfg["tools"]
                if not any(str(t["path"]).strip("/") in d or "tools/**" in d for d in deny)]
     hook = precommit_path(cfg["root"])
-    pre_ok = hook.exists() and "precommit" in hook.read_text(encoding="utf-8", errors="ignore")
-    bits = ["deny armed (%d rules)" % len(deny) if self_ok and not missing else
+    pre_ok = trust.hook_ok(hook)
+    bits = ["deny written (%d rules)" % len(deny) if self_ok and not missing else
             ("deny MISSING" if not deny else "deny does not cover " + ("self/" if not self_ok else ", ".join(missing))),
-            "pre-commit armed" if pre_ok else "pre-commit NOT installed"]
+            "pre-commit armed" if pre_ok else ("pre-commit NOT installed" if not hook.exists() else "pre-commit is NOT the plug init hook (run plug init)")]
     return (self_ok and not missing and pre_ok), " · ".join(bits)
 
 
@@ -108,8 +108,10 @@ def check_berserk(cfg):
     if os.environ.get("KB_APPROVE") == "1":
         return False, "DISARMED (KB_APPROVE=1 is set in this environment)"
     hook = precommit_path(cfg["root"])
-    if not (hook.exists() and "precommit" in hook.read_text(encoding="utf-8", errors="ignore")):
+    if not hook.exists():
         return False, "no pre-commit hook"
+    if not trust.hook_ok(hook):                   # a stub that only says exit 0 must not read as armed (D68)
+        return False, "pre-commit hook is not the one plug init writes"
     return True, "armed"
 
 
