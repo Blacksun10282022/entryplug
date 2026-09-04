@@ -60,7 +60,13 @@ Both forms are given because `!` runs in this same environment, so a chat-form a
 - `plug status`: the boot panel. `plug check`: the check-up + one page of report. `plug index`: rebuild the index. `plug search …`: search from the command line.
 - After a compaction: read the record the pin names before continuing, and keep answering in the same language.
 
+## Answering the owner (every equipment, every time)
+
+- Your reply starts with the judgment. Nothing before it: no boot state, no "record written", no check result, no list of files you read, no equipment name. The owner runs `plug status` or `plug check` himself when he wants that.
+- Two products, two readers. The record under `self/records/` carries the equipment's full contract, checklist and evidence list. The reply carries only what the owner reads: the judgment, the strongest counter, what would change it, the next step written as words he can say or one thing he can do today, and two options with real content to choose from. A citation the owner cannot open (no title, no timestamp or paragraph mark) is decoration: cut it.
+- A manual is not "fixed" until it has passed its own blind A/B (with the equipment against without, same model, same situations) under `workshop/<equipment>/bench/`; analysis sets the pattern. Change the manual, run a round, then file the refit request.
+
 ## Before you finish
 
-- One line `[what I did not look up]`; one line "what do you choose? (a sentence / A / B; skip it if you would rather not say)".
+- End with one line of what you did not look up, then a question in your own words offering two options with real content (never the same fixed sentence twice; the owner may also pick neither).
 - Ask yourself: was there anything here that neither the dictionary nor the playbooks cover? If so, write a proposal.
