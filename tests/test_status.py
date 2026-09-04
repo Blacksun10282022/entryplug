@@ -48,11 +48,15 @@ def test_kb_approve_in_the_environment_disarms_the_berserk_lock(repo, monkeypatc
 
 
 def test_emit_wraps_the_panel_for_session_start(repo):
+    """D74: the whole panel goes to the owner's screen as systemMessage; the pilot's context gets one verdict line."""
     r = plug(repo["root"], "status", "--emit")
-    assert r.returncode == 0, r.stdout + r.stderr
-    j = json.loads(r.stdout)
-    assert j["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-    assert "INSERTION SEQUENCE" in j["hookSpecificOutput"]["additionalContext"]
+    d = json.loads(r.stdout)
+    assert d["systemMessage"].startswith("ENTRY PLUG") and "SYNC RATE" in d["systemMessage"]
+    ctx = d["hookSpecificOutput"]["additionalContext"]
+    assert d["hookSpecificOutput"]["hookEventName"] == "SessionStart" and ctx.startswith("entry plug boot: SYNC RATE")
+    assert ctx.count("\n") == 0 and "[OK]" not in ctx
+
+
 def test_emit_never_exits_nonzero_even_when_the_panel_breaks(repo, monkeypatch):
     """--emit feeds a SessionStart hook: a degraded layer belongs in the panel as [NG], and a panel that throws
     should say so in one line rather than end the session with a nonzero exit (D54)."""
@@ -90,6 +94,14 @@ def test_a_stub_pre_commit_hook_is_not_reported_armed(git_repo):
 def test_emit_tells_the_pilot_the_panel_is_not_for_the_owner(repo):
     """Blind test 2026-09-03: both pilots pasted the boot panel and hook status into answers for the owner (D73)."""
     r = plug(repo["root"], "status", "--emit")
-    ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    d = json.loads(r.stdout)
+    ctx = d["hookSpecificOutput"]["additionalContext"]
     assert ctx.rstrip().endswith(status.PILOT_ONLY) and "never paste" in ctx
-    assert status.PILOT_ONLY not in plug(repo["root"], "status").stdout       # the human-facing panel stays clean
+    assert status.PILOT_ONLY not in d["systemMessage"] and status.PILOT_ONLY not in plug(repo["root"], "status").stdout
+
+
+def test_emit_context_keeps_every_ng_line(repo):
+    """A degraded layer must still reach the pilot in the one-line context (D74)."""
+    text = "ENTRY PLUG — INSERTION SEQUENCE\n[OK] a ... fine\n[NG] b ... broken\n[NG] c ... also broken\nSYNC RATE 50.0% — PATTERN ORANGE"
+    b = status.brief(text)
+    assert b.startswith("entry plug boot: SYNC RATE 50.0%") and b.count("[NG]") == 2 and "[OK]" not in b and b.endswith(status.PILOT_ONLY)

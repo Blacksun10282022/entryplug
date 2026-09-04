@@ -1,6 +1,7 @@
 # What: `plug status` — the boot self-check. One line per real check, then a verdict. Nothing here is a guess:
 #       every line is a fact read off disk or measured (the index is really queried and timed).
-# In:   cfg. `--emit` wraps the panel for a Claude Code SessionStart hook.
+# In:   cfg. `--emit` wraps the panel for a SessionStart hook: the panel as systemMessage (the owner's screen),
+#       one verdict line as additionalContext (the pilot).
 # Out:  the panel on stdout; exit code 0, or 1 only when the index layer itself is unusable (nothing can be
 #       searched, so the pilot must know before it starts).
 # Not:  never writes anything, never edits content, never injects rules or search results into the pilot;
@@ -14,9 +15,11 @@ import json, os, time
 from pathlib import Path
 from . import config, shapes, search, trust
 
-# The panel is a diagnostic for the pilot. In the 2026-09-03 blind test both pilots copied it, hook and trust
-# status included, into answers meant for the owner; the panel now says who it is for (D73).
-PILOT_ONLY = "(this panel is for you, the pilot: never paste it, a hook or trust status, or index numbers into an answer for the owner)"
+# The panel is for the owner's eyes; the pilot gets one line. In the 2026-09-03 blind test both pilots copied the
+# whole panel, hook and trust status included, into answers meant for the owner (D73); since D74 the panel travels
+# as systemMessage (shown on screen, never in the model's context) and the context carries only the verdict line
+# plus any [NG] lines, so a broken layer still reaches the pilot.
+PILOT_ONLY = "(boot line for you, the pilot: never paste it, a hook or trust status, or index numbers into an answer for the owner)"
 
 WIDTH = 20
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
@@ -170,6 +173,14 @@ def panel(cfg):
     return "\n".join(L), (0 if res["index"][0] else 1)
 
 
+def brief(text):
+    """The one line the pilot gets (D74): the verdict, plus every [NG] line so a degraded layer is still known."""
+    lines = text.splitlines()
+    ng = [l.strip() for l in lines if l.startswith("[NG]")]
+    verdict = lines[-1].strip() if lines else ""
+    return " · ".join(["entry plug boot: " + verdict] + ng) + " " + PILOT_ONLY
+
+
 def run(cfg, emit=False):
     """--emit is fail-safe by contract: a boot panel is a diagnostic, so a degraded layer prints [NG] inside the
     panel and a crashed panel says so in one line — neither ends the session with a nonzero exit (D53). Only the
@@ -179,8 +190,8 @@ def run(cfg, emit=False):
             text = panel(cfg)[0]
         except Exception as e:                # never let a broken panel take the session down with it
             text = "ENTRY PLUG — INSERTION SEQUENCE\n[NG] panel ............... could not be built (%s: %s)" % (type(e).__name__, e)
-        text += "\n" + PILOT_ONLY                  # D73: pilots pasted this panel into answers for the owner
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}, ensure_ascii=False))
+        print(json.dumps({"systemMessage": text, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": brief(text)}},
+                         ensure_ascii=False))
         return 0
     text, code = panel(cfg)
     print(text)

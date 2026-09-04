@@ -19,8 +19,8 @@ by A's steps 2 and 5 — a plugin cannot install deny rules.
 
 ## The SessionStart panel
 
-`plug status` is wired to `SessionStart` (matcher `startup|resume|clear`) with `--emit`, which hands the panel
-over as `additionalContext`. That is a panel of measured facts, not a briefing: it never injects the rules or
+`plug status` is wired to `SessionStart` (matcher `startup|resume|clear`) with `--emit`, which shows the panel
+on your screen as `systemMessage` and hands the pilot one verdict line (plus any [NG] line) as `additionalContext` (D74). That is a panel of measured facts, not a briefing: it never injects the rules or
 any search result.
 
 ```json

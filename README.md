@@ -138,7 +138,8 @@ content repo you get the manual, not the Base.
     "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
-`--emit` wraps the panel as `additionalContext`. It is a panel of measured facts — the index is really queried
+`--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as
+`additionalContext` (D74). It is a panel of measured facts — the index is really queried
 and timed — never the rules and never a search result. `AGENTS.md` tells Codex-style pilots to run `plug status`
 first thing instead.
 

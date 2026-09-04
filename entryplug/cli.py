@@ -32,7 +32,7 @@ def parser():
     p.add_argument("--no-expire", action="store_true", help="do not move proposals unapproved for 30 days to rejected/")
     p.add_argument("--quiet", action="store_true", help="print the findings only, no report")
     p = sub.add_parser("status", help="boot self-check: one line per layer, then a verdict (EVA panel)")
-    p.add_argument("--emit", action="store_true", help="print the panel as SessionStart additionalContext JSON")
+    p.add_argument("--emit", action="store_true", help="SessionStart JSON: the panel as systemMessage, one verdict line as additionalContext")
     p = sub.add_parser("apply", help="approve one refit request: verify base → land → check → commit (owner only)")
     p.add_argument("proposal")
     p.add_argument("--reject", metavar="REASON", help="reject: move to rejected/ and write one line of reason")
