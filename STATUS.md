@@ -91,3 +91,8 @@ this file and in `README.md`, the shapes in `docs/SHAPES.md`, and every decision
 There is no public copy; do not restore one from a fork.
 
 Tags are only cut when the acceptance script passes in full. There is no tag yet.
+
+## Changed on 2026-09-04 (D73–D77)
+
+Cuts made after the first blind A/B of an equipment manual, all on the machine's side of the pilot's context and time: the boot panel goes to the owner's screen as `systemMessage` and the pilot gets one verdict line (D73, D74); pre-commit refuses and does nothing else (D75); the index rebuilds itself on read (D76); the record reminder fires once per session (D77). `python -m pytest` and `python tests/acceptance.py` rerun after the cuts.
+

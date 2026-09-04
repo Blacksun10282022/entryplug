@@ -1,6 +1,6 @@
 # The record reminder: a Stop hook. Reminder level — it never blocks, it never rewrites anything, it exits 0 always.
-# What: at the end of a session, ask whether a record was written. If none was touched since the session began,
-#       print one nudge; otherwise stay silent. Stamps .kb/hooks/stop either way.
+# What: at the end of a turn, ask whether a record was written this session. If none was touched since the session
+#       began, print one nudge — once per session, not every turn (D77); otherwise stay silent. Stamps .kb/hooks/stop.
 # In:   the hook JSON on stdin (transcript_path tells us when the session started; cwd finds plug.yaml);
 #       PLUG_ROOT overrides the root. PLUG_RECORD_WINDOW (hours, default 8) is the fallback when there is no
 #       transcript path and no earlier stamp.
@@ -23,17 +23,11 @@ NUDGE = ("entry plug · no record was written this session. If the owner was giv
 
 
 def session_start(cfg, data):
-    """When this session began: the transcript's creation time, else the previous Stop stamp, else a window."""
+    """When this session began: the transcript's creation time, else a window (PLUG_RECORD_WINDOW hours)."""
     tp = data.get("transcript_path")
     if tp:
         try:
             return os.path.getctime(tp)
-        except OSError:
-            pass
-    stamp = cfg["hooks_dir"] / "stop"
-    if stamp.exists():
-        try:
-            return stamp.stat().st_mtime
         except OSError:
             pass
     return time.time() - float(os.environ.get("PLUG_RECORD_WINDOW", "8")) * 3600
@@ -61,9 +55,11 @@ def main():
         return 0                              # .plug-off: the plug is out, no record nagging
     since = session_start(cfg, data)
     newest = newest_record(cfg)
+    stamp = cfg["hooks_dir"] / "stop"
+    nudged_already = stamp.exists() and stamp.stat().st_mtime >= since     # D77: one nudge per session, not per turn
     cfg["hooks_dir"].mkdir(parents=True, exist_ok=True)
-    (cfg["hooks_dir"] / "stop").write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8", newline="\n")
-    if newest is not None and newest >= since:
+    stamp.write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8", newline="\n")
+    if (newest is not None and newest >= since) or nudged_already:
         return 0
     print(json.dumps({"systemMessage": NUDGE % (config.rel(cfg, cfg["records_dir"]))}, ensure_ascii=False))
     return 0

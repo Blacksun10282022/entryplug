@@ -2,7 +2,7 @@
 # pass · a check ERROR is refused · the real git hook blocks too · it leaves a last-fired stamp.
 # .plug-off does NOT relax this gate, and neither work/ nor an unregistered tools/ directory is protected.
 import os, subprocess, sys
-from conftest import ROOT, git
+from conftest import ROOT, git, plug
 
 GATE = ROOT / "gates" / "precommit.py"
 
@@ -30,14 +30,24 @@ def test_free_paths_pass_and_approve_unlocks(repo):
         assert r.returncode == 0, (path, r.stderr)
     r = run_gate(root, ["self/RULES.md", "self/records/a.md"], approve=True)
     assert r.returncode == 0, r.stderr
-    assert (root / "index.md").exists()
 
 
-def test_check_error_blocks_commit(repo):
+def test_hook_no_longer_runs_the_check_up_but_plug_check_still_reports(repo):
+    """D75: a broken anchor sentence is the check-up's business, not the hook's; the commit goes through in
+    milliseconds and `plug check` is where the ERROR shows."""
     p = repo["root"] / "tools/sunzi/dict/shi.md"
     p.write_text(p.read_text(encoding="utf-8").replace("势也\")", "力也\")", 1), encoding="utf-8")
     r = run_gate(repo["root"], ["self/records/a.md"])
-    assert r.returncode == 1 and "check found" in r.stderr and "anchor" in r.stderr
+    assert r.returncode == 0, r.stderr
+    assert "ERROR anchor" in plug(repo["root"], "check", "--quiet", "--no-expire").stdout
+
+
+def test_a_malformed_staged_record_is_refused_by_shape(repo):
+    """D75: the one content check the hook keeps — a staged record or proposal must have its shape."""
+    bad = repo["root"] / "self/records/2026-08-29-bad.md"
+    bad.write_text("---\ntool: sunzi\nby: x\nsituation: s\n---\n## 依据\nnone\n", encoding="utf-8")   # no verdict, sections missing
+    r = run_gate(repo["root"], ["self/records/2026-08-29-bad.md"])
+    assert r.returncode == 1 and "shape error, commit refused" in r.stderr and "2026-08-29-bad.md" in r.stderr
 
 
 def test_real_git_hook_blocks_direct_write_but_allows_records(git_repo):

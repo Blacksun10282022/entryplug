@@ -7,16 +7,17 @@
 # Not:  no reranking, no LLM, no vectors; never edits content; an unchanged file is never tokenised again
 #       (the hash is compared first and its chunk count read back from the table); corpus takes only the plain-text section
 #       (the timestamped copy is a duplicate and stays out of the index); work/ and workshop/ are never indexed.
-# Who:  cli (plug index) · gates/precommit (rebuild before commit) · tests.
+# Who:  cli (plug index) · search (rebuilds a stale index before answering, D76) · tests.
 # Note: chunking is per paragraph (a cleaned transcript is one paragraph per line, carrying [m:ss]); a paragraph
 #       over 800 chars is cut into 600/100 windows. Line numbers are 1-based so Read/sed can use them.
 #       Row ids: entry = file stem; corpus = doc#seq (single-paragraph doc = doc#window); record / material /
 #       proposal = file stem. When one doc id has both corpus/clean and corpus/raw only clean is indexed
 #       (raw is the truth, clean is the view; check greps both when verifying anchor sentences).
 # Deps: stdlib sqlite3 (FTS5) · jieba · PyYAML (via shapes).
-import hashlib, json, re, shutil, sqlite3, time
+import hashlib, json, re, sqlite3, time
 import jieba
 from . import __version__, SHAPE_VERSION, config, shapes
+from .mirror import mirror_skills, model_invocation_disabled, write_openai_yaml  # noqa: F401  (moved out, D76 line budget)
 
 jieba.setLogLevel(60)
 CJK = re.compile(r"[一-鿿]+")
@@ -177,7 +178,8 @@ def build(cfg, full=False):
         con.execute("delete from fts where file=?", (r,)), con.execute("delete from files where rel=?", (r,))
     titles = {d["id"]: d["title"] for _, d in docs.values()}
     for k, v in {"aliases": json.dumps(aliases, ensure_ascii=False), "titles": json.dumps(titles, ensure_ascii=False),
-                 "built_at": time.strftime("%Y-%m-%d %H:%M:%S"), "version": __version__, "shape_version": str(SHAPE_VERSION)}.items():
+                 "built_at": time.strftime("%Y-%m-%d %H:%M:%S"), "built_epoch": repr(time.time()), "walked": str(len(files)),
+                 "version": __version__, "shape_version": str(SHAPE_VERSION)}.items():
         con.execute("insert or replace into meta values (?,?)", (k, v))
     con.commit(), con.close()
     write_index_md(cfg, entries, stats)
@@ -185,6 +187,22 @@ def build(cfg, full=False):
     mirror_skills(cfg)
     stats.update(files=len(seen), removed=len(gone), entries=len(entries), docs=len(docs))
     return stats
+
+
+def stale(cfg):
+    """Is the index older than the content? Cheap on purpose (D76): a content file modified after the last build,
+    or a different number of walked files, means stale; no hashing, no tokenising. Absent or unreadable = stale."""
+    if not cfg["index_path"].exists():
+        return True
+    try:
+        con = sqlite3.connect(cfg["index_path"])
+        meta = dict(con.execute("select key, value from meta"))
+        con.close()
+    except sqlite3.Error:
+        return True
+    built, walked = float(meta.get("built_epoch", 0)), int(meta.get("walked", -1))
+    files = [f for f in config.walk(cfg) if f["area"] != "checks"]
+    return len(files) != walked or any(f["path"].stat().st_mtime > built for f in files)
 
 
 def write_index_md(cfg, entries, stats):
@@ -216,38 +234,3 @@ def write_playbook_index(cfg, playbooks):
         if new:
             lines += ["", "## Pending proposals for a missing playbook"] + ["- %s → %s" % x for x in new]
         (t["dir"] / "playbooks" / "INDEX.md").write_text("\n".join(lines[:60]) + "\n", encoding="utf-8", newline="\n")
-
-
-def mirror_skills(cfg):
-    """Copy every equipment's SKILL.md into each pilot's repo-level skills directory (no-op when identical).
-    `disable-model-invocation: true` in the manual's frontmatter is passed through to Codex's openai.yaml,
-    whose implicit-invocation switch does not live in the frontmatter."""
-    for name, pilot in cfg["pilots"].items():
-        for t in cfg["tools"]:
-            src = t["dir"] / "SKILL.md"
-            if not src.exists():
-                continue
-            dst = cfg["root"] / pilot["skills"] / t["name"] / "SKILL.md"
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            if not dst.exists() or dst.read_bytes() != src.read_bytes():
-                shutil.copyfile(src, dst)
-            if name == "codex":
-                implicit = not model_invocation_disabled(src.read_text(encoding="utf-8"))
-                (dst.parent / "agents").mkdir(exist_ok=True)
-                write_openai_yaml(dst.parent / "agents" / "openai.yaml", implicit)
-
-
-def model_invocation_disabled(text):
-    """`disable-model-invocation: true` in a manual's frontmatter = sensitive equipment, owner-triggered only."""
-    fm, _, _ = shapes.split_frontmatter(text)
-    return bool((fm or {}).get("disable-model-invocation"))
-
-
-def write_openai_yaml(path, implicit):
-    """Written when absent; rewritten only when the switch disagrees with the manual's frontmatter, so a hand-edited
-    file is left alone as long as it still says the same thing."""
-    old = path.read_text(encoding="utf-8") if path.exists() else None
-    if old is not None and ("allow_implicit_invocation: true" in old) == implicit:
-        return
-    path.write_text("policy:\n  allow_implicit_invocation: %s\n" % ("true" if implicit else "false"),
-                    encoding="utf-8", newline="\n")

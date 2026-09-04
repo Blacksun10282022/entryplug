@@ -68,7 +68,11 @@ def dense_candidates(cfg, queries, scope):
     return []
 
 
-def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2):
+def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, auto_index=True):
+    if auto_index:                              # D76: a stale index is rebuilt on read; plug index is no longer a ritual
+        from . import index
+        if index.stale(cfg):
+            index.build(cfg)
     if isinstance(queries, str):
         queries = [queries]
     queries = [q for q in queries if q and q.strip()]

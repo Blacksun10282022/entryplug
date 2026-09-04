@@ -78,7 +78,7 @@ def check_index(cfg):
         con.close()
         probe = next(iter(json.loads(meta.get("aliases", "{}")) or {"a": []}), "a")
         t0 = time.perf_counter()
-        search.search(cfg, probe, scope="all", k=3)
+        search.search(cfg, probe, scope="all", k=3, auto_index=False)      # status never writes (D76)
         ms = int((time.perf_counter() - t0) * 1000)
     except Exception as e:
         return False, "%s unreadable (%s: %s)" % (cfg["index"], type(e).__name__, e)

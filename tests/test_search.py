@@ -1,6 +1,7 @@
 # Verb search: a two-character Chinese word hits (ERROR-grade acceptance), alias expansion, the default scope is
 # the equipment layer, corpus needs saying, several queries merge, the row format, no reranking.
 import json
+import pytest
 from entryplug import search
 from conftest import plug
 
@@ -58,19 +59,23 @@ def test_format_rows_and_cli(repo):
     assert json.loads(r.stdout)["queries"]
 
 
-def test_zero_hits_explain_scope_and_missing_index_is_loud(repo):
+def test_zero_hits_explain_scope_and_a_missing_index_is_rebuilt_on_read(repo):
     r = plug(repo["root"], "search", "责任")                       # 责任 lives only in the corpus: 0 hits in tools, the tail must say so
     assert r.returncode == 0 and r.stdout.startswith("showing 0/0 · no hit in scope tools") and "scope=corpus" in r.stdout and "index built" in r.stdout
     r = plug(repo["root"], "search", "责任", "--scope", "corpus")
     assert r.stdout.startswith("BV1EXAMPLE01#5")
     text = search.format_rows(search.search(repo, "责任", scope="corpus"))
     assert "showing 1/1" in text.splitlines()[-1] and "no hit" not in text
-    repo["index_path"].unlink()
+    repo["index_path"].unlink()                                   # D76: a missing index is rebuilt on read, on the CLI and over MCP
     r = plug(repo["root"], "search", "责任")
-    assert r.returncode == 1 and "run plug index first" in r.stderr and r.stdout == ""
+    assert r.returncode == 0 and r.stdout.startswith("showing 0/0 · no hit in scope tools") and repo["index_path"].exists()
+    repo["index_path"].unlink()
     from entryplug import mcp
-    res, err = mcp.handle(repo, {"method": "tools/call", "params": {"name": "search", "arguments": {"query": "责任"}}})
-    assert err is None and res["isError"] is True and "run plug index first" in res["content"][0]["text"]
+    res, err = mcp.handle(repo, {"method": "tools/call", "params": {"name": "search", "arguments": {"query": "责任", "scope": "corpus"}}})
+    assert err is None and res["isError"] is False and "BV1EXAMPLE01#5" in res["content"][0]["text"]
+    repo["index_path"].unlink()
+    with pytest.raises(FileNotFoundError, match="run plug index first"):       # only a caller that opts out stays loud (plug status)
+        search.search(repo, "责任", auto_index=False)
 
 
 def test_fts_query_construction():
@@ -79,3 +84,16 @@ def test_fts_query_construction():
     assert '"delay"' in q and '"拖延"' in q
     assert search.fts_query("势", [["势", "势能"]]) == '"势"* OR "势能"'
     assert search.fts_query("", []) is None
+
+
+def test_a_stale_index_is_rebuilt_on_read(repo):
+    """D76: edit a page, search for the new word: the index is rebuilt before the answer, no plug index needed."""
+    from entryplug import index
+    assert not index.stale(repo)
+    p = repo["root"] / "tools/sunzi/dict/shi.md"
+    p.write_text(p.read_text(encoding="utf-8") + "\n新词自动重建索引。\n", encoding="utf-8", newline="\n")
+    assert index.stale(repo)
+    assert search.search(repo, "自动重建索引")["total"] > 0
+    assert not index.stale(repo)
+    assert search.search(repo, "自动重建索引", auto_index=False)["total"] > 0
+

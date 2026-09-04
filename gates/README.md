@@ -5,7 +5,7 @@ Four scripts. One hook, one verb; one line of reason; each stamps `.kb/hooks/<na
 
 | script | prohibition | mounted on | hardness |
 |---|---|---|---|
-| `precommit.py` | ① berserk lock: do not change the rules or the equipment, do not build new equipment — write a refit request | the content repo's `.git/hooks/pre-commit` (template `hooks/pre-commit`) | hardest: across harnesses, across languages, it catches a script writing directly |
+| `precommit.py` | ① berserk lock: a protected path cannot be committed without `KB_APPROVE=1`; a staged record or proposal must have its shape | git pre-commit (installed by `plug init`) · `plug.yaml: protected / unprotected / protect` | **Hard.** Refuses and nothing else since D75: no index rebuild, no check-up, no numbers page in the hook |
 | `outbound.py` | ② sortie lock: nothing goes out in the owner's name, ask first | PreToolUse (Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `.codex/hooks.json`), one list in `plug.yaml: outbound` | **Blocks on both** — one deny decision on stdout, exit 0, read by both pilots (D65). Hooks are still fail-open if the script never runs, and a tool name outside the matcher never reaches it |
 | `precompact.py` | (not a prohibition) the compaction pin | PreCompact + SessionStart(compact) | five facts, nothing else |
 | `stop.py` | (not a prohibition) the record reminder | Stop | reminder only: it never blocks, it never writes, it exits 0 always |

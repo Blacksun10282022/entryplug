@@ -1,7 +1,8 @@
 # The berserk lock (prohibition ①), the hardest of the layers: a git pre-commit hook.
 # What: a commit that touches a protected path (by default self/RULES.md · self/facts/** · tools/** minus the
 #       corpus; see plug.yaml protected/unprotected) without KB_APPROVE=1 is refused with one line of reason.
-#       Every other commit: rebuild the index, then check must report 0 ERROR to pass. Stamps .kb/hooks/precommit.
+#       Every other commit: a staged record or proposal must have its shape (D75); nothing else is checked here,
+#       nothing is rebuilt or written, so the hook takes milliseconds. Stamps .kb/hooks/precommit.
 # In:   the git index (git diff --cached --name-only -z); tests and first contact can pass PLUG_STAGED instead
 #       (newline-separated paths) — honoured only outside a real git commit (GIT_INDEX_FILE unset). PLUG_ROOT is
 #       ignored here: the repo is the one git is committing in.
@@ -66,12 +67,16 @@ def main():
         print("berserk lock: this commit touches the protected path %s%s — rules and equipment can only be changed "
               "through a refit request (proposals/pending/); the owner approves with plug apply" % (hit[0], more), file=sys.stderr)
         return 1
-    from entryplug import check, index
-    index.build(cfg)
-    r = check.run(cfg, expire=False)
-    if r["errors"]:
-        e = r["errors"][0]
-        print("check found %d ERROR(s), commit refused: %s · %s · %s" % (len(r["errors"]), e["code"], e["file"], e["msg"]), file=sys.stderr)
+    from entryplug import shapes                 # D75: the hook refuses, it does not rebuild or check up
+    known = {f["rel"]: f for f in config.walk(cfg)}
+    bad = []
+    for rel in files:
+        f = known.get(rel)
+        if f and f["area"] in ("record", "proposal") and f["path"].exists():
+            bad += ["%s · %s" % (rel, e) for e in shapes.parse_file(f["path"].read_text(encoding="utf-8"), f["area"])["errors"]]
+    if bad:
+        print("shape error, commit refused: %s%s — fix the file; plug check explains the shape" %
+              (bad[0], " (%d in total)" % len(bad) if len(bad) > 1 else ""), file=sys.stderr)
         return 1
     return 0
 

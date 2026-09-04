@@ -46,3 +46,15 @@ def test_no_config_and_bad_json_are_both_silent(repo, tmp_path):
                        PYTHONIOENCODING="utf-8", PLUG_RECORD_WINDOW="0"), capture_output=True, text=True,
                        encoding="utf-8", input="this is not json")
     assert r.returncode == 0 and "systemMessage" in r.stdout       # unreadable payload still falls back to the window
+
+
+def test_second_stop_in_the_same_session_is_silent(repo, tmp_path):
+    """D77: the reminder fires once per session (the transcript's start), not at the end of every turn."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    payload = {"hook_event_name": "Stop", "cwd": str(repo["root"]), "transcript_path": str(transcript)}
+    first = run(repo["root"], payload)
+    assert first.returncode == 0 and "no record was written" in json.loads(first.stdout)["systemMessage"]
+    second = run(repo["root"], payload)
+    assert second.returncode == 0 and second.stdout.strip() == ""
+

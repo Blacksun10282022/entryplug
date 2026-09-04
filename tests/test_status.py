@@ -73,7 +73,8 @@ def test_emit_payload_is_session_start_context(repo, capsys):
     status.run(repo, emit=True)
     out = json.loads(capsys.readouterr().out)
     assert out["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-    assert "INSERTION SEQUENCE" in out["hookSpecificOutput"]["additionalContext"]
+    assert "INSERTION SEQUENCE" in out["systemMessage"]                                   # the owner's screen (D74)
+    assert out["hookSpecificOutput"]["additionalContext"].startswith("entry plug boot: ")   # the pilot's one line
 
 
 def test_a_stub_pre_commit_hook_is_not_reported_armed(git_repo):
