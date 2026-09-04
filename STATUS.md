@@ -13,7 +13,7 @@ reads). First contact is four-for-four green on both sides against a temporary c
 write, plus the deny rules file checked).
 
 Machine itself: 2026-09-03 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5) · git 2.51.1 · jieba 0.42.1 —
-`python -m pytest` 120 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
+`python -m pytest` 125 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
 (the example equipment). Build machine: Claude Code 2.1.259, codex-cli 0.152.0.
 
 ## Changed on 2026-09-03 (the review round, D65–D72)
