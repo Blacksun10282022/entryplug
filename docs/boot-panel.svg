@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1088" height="228" viewBox="0 0 1088 228" role="img" aria-label="entry plug boot panel on the Sunzi example equipment">
+<title>entry plug boot panel — plug --root example-tool status</title>
+<rect x="0.5" y="0.5" width="1087" height="227" rx="8" fill="#0d1117" stroke="#30363d"/>
+<g font-family="ui-monospace, SFMono-Regular, &apos;Cascadia Mono&apos;, Consolas, &apos;Liberation Mono&apos;, Menlo, monospace" font-size="14" xml:space="preserve">
+<text x="28" y="30" fill="#e6edf3" font-weight="600">ENTRY PLUG — INSERTION SEQUENCE</text>
+<text x="28" y="52"><tspan fill="#3fb950">[OK]</tspan><tspan fill="#c9d1d9"> LCL pressure ....... index.sqlite (38 docs, 444ms)</tspan></text>
+<text x="28" y="74"><tspan fill="#3fb950">[OK]</tspan><tspan fill="#c9d1d9"> A10 nerve link ..... self/ (RULES 8 · style · facts 1 · records 3)</tspan></text>
+<text x="28" y="96"><tspan fill="#f85149">[NG]</tspan><tspan fill="#c9d1d9"> AT-Field ........... deny MISSING · pre-commit NOT installed</tspan></text>
+<text x="28" y="118"><tspan fill="#f85149">[NG]</tspan><tspan fill="#c9d1d9"> Berserk lock ....... no pre-commit hook </tspan><tspan fill="#f85149">[NG]</tspan><tspan fill="#c9d1d9"> Sortie lock ... hook not wired</tspan></text>
+<text x="28" y="140"><tspan fill="#3fb950">[OK]</tspan><tspan fill="#c9d1d9"> Equipment bay ...... 1 registered (sunzi) · 1 pending</tspan></text>
+<text x="28" y="162"><tspan fill="#8b949e">[--]</tspan><tspan fill="#c9d1d9"> plug-off ........... not present</tspan></text>
+<text x="28" y="184" fill="#d29922">SYNC RATE 50.0% — PATTERN ORANGE: the AT-Field · the berserk lock · the sortie lock degraded; run plug init --pilot both</text>
+</g></svg>
