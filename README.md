@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md)
+
 # entryplug · Entry Plug
 
 entryplug is the plug that lets a coding agent work from one person's written judgment without ever rewriting it. Three file shapes, one read-only search interface, two machine-enforced locks, one self-check. It does not judge, it does not orchestrate, and it does not learn on its own. A Sunzi example equipment ships with it, so the acceptance script and a reproducible benchmark both run in five minutes. This is something I use myself. It is not a general-purpose product.
