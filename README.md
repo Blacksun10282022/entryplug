@@ -196,6 +196,7 @@ The private blind benchmark runs on the owner's own situations, which never ente
 | B, a screening manual | Fable 5.1 | Fable 5.1 | 6/6 | 0.61 to 1.00 |
 | B | GPT-6-astra | Fable 5.1 | 6/6 | 0.61 to 1.00 |
 | B | Opus 5 | GPT-5.6 | 6/6 | 0.61 to 1.00 |
+| B | GPT-5.6 | GPT-6-astra (reads the owner's materials) | 6/6 | 0.61 to 1.00 |
 
 Every other row, including the judge that reads the owner's cited materials and docks facts it cannot open, is in `bench/registry.md`. No LLM-judge quality score is published here: what leaves the repo is a registered proportion with its interval, never a judge's number and never a total. Measured per answer, the equipped reply costs 3 to 17 times the bare one; the per-case cost table stays in the content repo's workshop.
 

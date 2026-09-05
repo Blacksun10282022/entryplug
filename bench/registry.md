@@ -26,6 +26,8 @@ Interval = Wilson 95% on the proportion of the six situations where the blind ju
 | 2026-09-05 | B line | B · pilot gpt-5.6 · judge gpt-5.6 | 6 | 3/6 = 0.50 [0.19, 0.81] | - | - | - | 5.4x tokens | 3W 1T 2L: passes only as a tie; under judge gpt-6-astra (reads the materials) 6/6 |
 | 2026-09-05 | B line | B · pilot fable 5.1 · judge gpt-6-astra (reads the materials) | 6 | 4/6 = 0.67 [0.30, 0.90] | - | - | - | 6.2x $ | 4W 0T 2L |
 | 2026-09-05 | B line | B · pilot gpt-6-astra · judge gpt-6-astra (reads the materials) | 6 | 3/6 = 0.50 [0.19, 0.81] | - | - | - | 5.1x tokens | 3W 2T 1L |
+| 2026-09-05 | B line | B · pilot gpt-5.6 · judge gpt-6-astra (reads the materials) | 6 | 6/6 = 1.00 [0.61, 1.00] | - | - | - | 5.4x tokens | 6/6 under the judge that read the owner's materials; 3W 1T 2L under judge gpt-5.6 and 2W 2T 2L under judge fable 5.1 |
+| 2026-09-05 | B line | B · pilot Opus 5 · judge gpt-6-astra (reads the materials) | 6 | 5/6 = 0.83 [0.44, 0.97] | - | - | - | 3x $ | 5W 0T 1L under the judge that read the owner's materials |
 
 ## Drift table (a line per model change or rerun; a drop gets registered too)
 
