@@ -1,37 +1,80 @@
 # The public mini gold set · the Sunzi example equipment · input format for plug eval (see bench/README.md).
 # One mechanical metric only: did the expected doc / entry id make the top k? Zero recall on Chinese = ERROR.
 # The queries themselves are data and stay in Chinese — that is the whole point of the test.
+#
+# What this set measures: whether the index + tokenizer + alias expansion put the right page in the top 10 for a
+# query, across query styles. Each case names the angle it exercises. `expect` is a doc id (corpus, e.g.
+# sunzi-05-bingshi), an entry id (a dict / playbook / record stem, e.g. shi / opponent-delays) or a chunk id;
+# any one of the listed ids landing in the top k counts (recall is per document). Every id below was confirmed
+# present in the example equipment by running the search, not guessed. Coverage: all 13 chapters + the lecture
+# transcript on the corpus side; all 10 dict entries + all 3 playbooks on the tools side.
 version: 1
 scope: corpus            # default scope; a case may override it
 cases:
-  # —— Chinese: source terms, two-character words, four-character phrases, colloquial rewrites ——
+  # ============================ CHINESE ============================
+  # —— corpus · source terms, two-character words, four-character phrases (does the classical term find its chapter) ——
   - {id: zh-01, q: 诡道, expect: [sunzi-01-shiji]}
   - {id: zh-02, q: 奇正, expect: [sunzi-05-bingshi]}
-  - {id: zh-03, q: 虚实, expect: [sunzi-05-bingshi, sunzi-06-xushi]}
+  - {id: zh-03, q: 虚实, expect: [sunzi-05-bingshi, sunzi-06-xushi]}         # cross-chapter: 虚实 opens ch5, titles ch6
   - {id: zh-04, q: 以迂为直, expect: [sunzi-07-junzheng]}
   - {id: zh-05, q: 知彼知己, expect: [sunzi-03-mougong]}
-  - {id: zh-06, q: 不战而屈人之兵, expect: [sunzi-03-mougong]}
+  - {id: zh-06, q: 不战而屈人之兵, expect: [sunzi-03-mougong]}              # long phrase, verbatim from the chapter
   - {id: zh-07, q: 反间, expect: [sunzi-13-yongjian]}
   - {id: zh-08, q: 先为不可胜, expect: [sunzi-04-junxing]}
   - {id: zh-09, q: 致人而不致于人, expect: [sunzi-06-xushi]}
   - {id: zh-10, q: 火攻, expect: [sunzi-12-huogong]}
-  - {id: zh-11, q: 责任转移, expect: [BV1EXAMPLE01]}
-  - {id: zh-12, q: 投入太多退不回去, expect: [BV1EXAMPLE01]}
+  # —— corpus · the lecture transcript: colloquial concepts that never appear verbatim in the classical text ——
+  - {id: zh-11, q: 责任转移, expect: [BV1EXAMPLE01]}                        # concept only; the word is the lecturer's, not Sunzi's
+  - {id: zh-12, q: 投入太多退不回去, expect: [BV1EXAMPLE01]}                # plain-language paraphrase of 势 / sunk cost
+  # —— tools · playbooks: a described situation should find the matching playbook (not the classical term) ——
   - {id: zh-13, q: 对方拖延 等 截止, scope: tools, expect: [opponent-delays]}
   - {id: zh-14, q: 对方示弱 让步, scope: tools, expect: [opponent-feigns-weakness]}
-  - {id: zh-15, q: 势, scope: tools, expect: [shi]}
-  - {id: zh-16, q: [避实击虚, 攻其所不守], expect: [sunzi-06-xushi]}
+  # —— tools · dict: single character routes through the title, a phrase through the method entry ——
+  - {id: zh-15, q: 势, scope: tools, expect: [shi]}                         # one char: matches the entry title exactly
+  - {id: zh-16, q: [避实击虚, 攻其所不守], expect: [sunzi-06-xushi]}        # multi-angle: two rewrites of the same idea
   - {id: zh-17, q: 将有五危, expect: [sunzi-08-jiubian]}
   - {id: zh-18, q: 九地, expect: [sunzi-11-jiudi]}
   - {id: zh-19, q: 庙算 五事七计, scope: tools, expect: [miao-suan]}
   - {id: zh-20, q: 用间有五, expect: [sunzi-13-yongjian]}
+  # —— corpus · chapters the classical-term cases above did not reach (作战 / 行军 / 地形) ——
+  - {id: zh-21, q: 兵贵胜 拙速, expect: [sunzi-02-zuozhan]}                 # ch2 作战: "兵闻拙速" / "兵贵胜，不贵久"
+  - {id: zh-22, q: 处军相敌, expect: [sunzi-09-xingjun]}                    # ch9 行军: "凡处军相敌"
+  - {id: zh-23, q: [地形, 九地], expect: [sunzi-10-dixing, sunzi-11-jiudi]} # cross-chapter multi: 地形→ch10, 九地→ch11
+  # —— tools · the third playbook (situation described in the owner's words, not a term) ——
+  - {id: zh-24, q: 定 时间 地点 议程, scope: tools, expect: [choose-battlefield]}
+  # —— synonym reaching the corpus: a modern word (态势) that is a dict alias of 势, expanded onto the classical text ——
+  - {id: zh-25, q: 态势, expect: [sunzi-05-bingshi]}                        # 同义改写: 态势 is never in the text; alias expansion reaches 势 in ch5
+  # —— concept, not the original word: 先知 is an alias of 知彼知己, not its title ——
+  - {id: zh-26, q: 先知, scope: tools, expect: [zhi-bi-zhi-ji]}
   # —— deliberate typos / colloquial phrasing (recall is expected to be lower; recorded, not hidden) ——
-  - {id: zh-typo-01, q: 诡到, expect: [sunzi-01-shiji]}
+  - {id: zh-typo-01, q: 诡到, expect: [sunzi-01-shiji]}                     # homophone typo of 诡道; currently a MISS, kept on purpose
   - {id: zh-typo-02, q: 虚势 攻其无备, expect: [sunzi-01-shiji]}
-  # —— English / pinyin aliases (these go through the dictionary's alias expansion) ——
+
+  # ============================ ENGLISH / PINYIN ============================
+  # —— tools · dict: an English gloss should reach its entry through the dictionary's alias expansion ——
   - {id: en-01, q: deception, scope: tools, expect: [gui-dao]}
   - {id: en-02, q: momentum, scope: tools, expect: [shi]}
   - {id: en-03, q: win without fighting, scope: tools, expect: [bu-zhan-er-qu]}
   - {id: en-04, q: double agent, scope: tools, expect: [fan-jian]}
-  - {id: en-05, q: xushi, scope: tools, expect: [xu-shi]}
+  - {id: en-05, q: xushi, scope: tools, expect: [xu-shi]}                   # pinyin alias
   - {id: en-06, q: seven calculations, scope: tools, expect: [miao-suan]}
+  # —— tools · dict: the entries the six above do not cover (形 / 奇正 / 迂直之计 / 知彼知己) ——
+  - {id: en-07, q: disposition, scope: tools, expect: [xing]}
+  - {id: en-08, q: surprise and direct, scope: tools, expect: [qi-zheng]}
+  - {id: en-09, q: indirect route, scope: tools, expect: [yu-zhi]}
+  - {id: en-10, q: know the enemy and yourself, scope: tools, expect: [zhi-bi-zhi-ji]}
+  # —— tools · dict: pinyin spellings (romanized query, no diacritics) ——
+  - {id: en-11, q: guidao, scope: tools, expect: [gui-dao]}
+  - {id: en-12, q: qizheng, scope: tools, expect: [qi-zheng]}
+  - {id: en-13, q: fanjian, scope: tools, expect: [fan-jian]}
+  - {id: en-14, q: buzhan, scope: tools, expect: [bu-zhan-er-qu]}
+  # —— corpus · English querying the Chinese corpus: the gloss expands to its Chinese aliases, which hit the chapter ——
+  - {id: en-15, q: double agent, scope: corpus, expect: [sunzi-13-yongjian]}      # 反间/用间/五间 live only in ch13
+  - {id: en-16, q: seven calculations, scope: corpus, expect: [sunzi-01-shiji]}   # 庙算/五事 in ch1
+  - {id: en-17, q: win without fighting, scope: corpus, expect: [sunzi-03-mougong]}
+  - {id: en-18, q: indirect route, scope: corpus, expect: [sunzi-07-junzheng]}
+  - {id: en-19, q: deception, scope: corpus, expect: [sunzi-01-shiji]}            # 诡道 only in ch1
+  - {id: en-20, q: surprise and direct, scope: corpus, expect: [sunzi-05-bingshi]}
+  # —— tools · multi-angle English (a list of glosses / pinyin for the same entry) ——
+  - {id: en-21, q: [shi, momentum], scope: tools, expect: [shi]}
+  - {id: en-22, q: [know the enemy and yourself, zhibizhiji], scope: tools, expect: [zhi-bi-zhi-ji]}

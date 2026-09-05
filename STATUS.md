@@ -13,8 +13,12 @@ reads). First contact is four-for-four green on both sides against a temporary c
 write, plus the deny rules file checked).
 
 Machine itself: 2026-09-03 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5) · git 2.51.1 · jieba 0.42.1 —
-`python -m pytest` 125 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
+`python -m pytest` 127 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
 (the example equipment). Build machine: Claude Code 2.1.259, codex-cli 0.152.0.
+
+How the machine is measured: the locks by the acceptance script, retrieval by the public gold set (`plug eval`, the
+number kept in `bench/README.md`), and the equipment manuals by the private blind A/B in `docs/BENCH.md`. No
+LLM-judge quality score is published from here.
 
 ## Changed on 2026-09-03 (the review round, D65–D72)
 
@@ -58,7 +62,7 @@ the sortie lock refuses Bash curl and a subagent's Bash curl; Codex refuses curl
   it; a proposal narrowing it to `tool: <this equipment>` is pending. A check that cries wolf gets ignored
   within a fortnight, so scoping matters more than coverage here.
 - A deployed map does not update when its template does (D55): `plug init` writes the maps only when absent, so
-  unit-01 kept the pre-D53 sortie-lock claim after the template was corrected. Fixed in place, and `plug check`
+  the content repo kept the pre-D53 sortie-lock claim after the template was corrected. Fixed in place, and `plug check`
   now raises `map_claim` if a deployed AGENTS.md still asserts a lock Codex has not got.
 - Codex hooks work at all now (D53): every one of them had reported `Failed` since install, because Codex takes
   `command` as one whitespace-split string and we were emitting Claude's quoted form. Fixed in `plug init`.

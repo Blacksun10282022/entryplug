@@ -12,7 +12,8 @@ def test_public_goldset_on_example(repo):
     assert "zh " in tail and "en " in tail and "ERROR" not in r.stdout
     scores = {l.split()[0]: float(l.split("recall@10 ")[1].split()[0]) for l in r.stdout.splitlines() if "recall@10 " in l and not l.startswith("recall@10")}
     assert scores["zh-01"] == 1.0 and scores["zh-11"] == 1.0 and scores["en-01"] == 1.0 and scores["zh-13"] == 1.0
-    assert sum(v for k, v in scores.items() if k.startswith("zh-") and "typo" not in k) / 20 >= 0.9
+    zh = [v for k, v in scores.items() if k.startswith("zh-") and "typo" not in k]
+    assert sum(zh) / len(zh) >= 0.9      # mean over however many non-typo zh cases the set holds (was hard-coded /20)
 
 
 def test_chinese_zero_is_error(repo, tmp_path):

@@ -160,6 +160,16 @@ extras/       where connector side-scripts live (not counted, not tested)
 Dependencies: Python 3.12 · stdlib (sqlite3 + FTS5) · jieba · PyYAML · git. Works on native Windows, nothing to
 compile. Vector retrieval is an optional module, `pip install entryplug[dense]` (an interface stub in this version).
 
+## How it is measured
+
+Three things, three ways, and never mixed into one number. The two locks are checked by the acceptance script
+(`python tests/acceptance.py`, the machine items PASS). Retrieval is checked against a public gold set that anyone
+can reproduce (`plug eval bench/public/goldset-sunzi.yaml`; the recall number lives in `bench/README.md`).
+Whether an equipment manual earns its place is settled by a blind A/B of the equipped pilot against the same model
+stripped bare, on the owner's own private situations, whose cases never enter this repo. The protocol is in
+`docs/BENCH.md` and the register is `bench/registry.md`. No LLM-judge quality score is published here: what leaves
+the repo is a registered proportion with its interval, never a judge's number and never a total.
+
 ## What it does not do
 
 No model training, no LLM scoring of judgments, no total score; no agent runtime, rule engine or matcher; no LLM

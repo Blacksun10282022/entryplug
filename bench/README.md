@@ -15,6 +15,14 @@ plug --root example-tool eval bench/public/goldset-sunzi.yaml
 Exit code 1 = zero recall on Chinese queries (ERROR-grade acceptance, §6.1); Chinese far below English is only a
 WARNING.
 
+The set holds 50 cases — 28 Chinese and 22 English/pinyin — across the corpus layer (all thirteen chapters plus
+the lecture transcript) and the tools layer (all ten dictionary entries and all three playbooks); each case's
+comment names the angle it tests: verbatim term, synonym rewrite, concept without the original word, cross-chapter,
+an English gloss reaching the Chinese corpus, a described situation reaching a playbook. Measured on the example
+equipment (2026-09-05): overall recall@10 0.98, Chinese 0.96, English 1.00; the single miss is the deliberate
+homophone typo, kept on purpose. `tests/test_eval_goldset.py` holds this in CI with a floor of 0.93 — the measured
+0.98 minus a 0.05 margin — plus a separate assertion that Chinese recall is never zero.
+
 ## Gold set yaml format
 
 ```yaml
