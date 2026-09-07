@@ -79,6 +79,7 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         if f["area"] == "corpus":
             d = shapes.parse_doc(text, f["path"], f["sub"])
             docs.setdefault(d["id"], []).append(d["text"])
+            docs.setdefault(d["title"], []).append(d["text"])
             continue
         if f["area"] == "rules":
             rules = shapes.parse_rules(text)
@@ -86,7 +87,7 @@ def run(cfg, expire=True, tool_checks=True, today=None):
             continue
         if f["area"] in ("style", "facts", "reading"):
             continue
-        p = shapes.parse_file(text, f["area"])
+        p = shapes.parse_file(text, None if f["sub"] == "kit" and not text.startswith("---") else f["area"])
         p.update(f, age=age_days(f, p["fm"], added, today), text=text)
         for e in p["errors"]:
             err("shape", f["rel"], e)
@@ -165,6 +166,8 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         for rid in shapes.rule_refs(r["sections"].get("依据", ""), ids):
             if rid not in ids:
                 err("rid", r["rel"], "%s is named in 依据 but does not exist in RULES.md" % rid)
+            elif rid in rules["retired_ids"]:
+                warn("rid_retired", r["rel"], "%s is named in 依据 but is retired in RULES.md" % rid)
         if not r["fm"].get("outcome") and r["age"] >= 30:
             warn("outcome", r["rel"], "record has had no outcome for %d days" % r["age"])
     seen_p = {}

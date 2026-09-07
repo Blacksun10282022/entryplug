@@ -20,7 +20,8 @@ from . import __version__, shapes
 
 AGREE_PREFIX = ("同意", "同 ", "按它", "按 verdict")
 RIGHT_MARKERS = {"它对": "it was right", "我对": "I was right", "说不清": "unclear"}
-RE_QUOTE = re.compile(r"\(src:\s*([A-Za-z0-9][\w\-\.]*)(?:#[\w\-:\.]+)?\s+\"([^\"]+)\"\s*\)|([A-Za-z0-9][\w\-\.]*)@[\d:\.]+「([^」]+)」")
+RE_QUOTE = re.compile(r"\(src:\s*([A-Za-z0-9][\w\-\.]*)(?:#[\w\-:\.]+)?\s+\"([^\"]+)\"\s*\)|([A-Za-z0-9][\w\-\.]*)@[\d:\.]+「([^」]+)」"
+                      r"|《([^》\n]+)》\s*\[(?:\d+:\d{2}(?::\d{2})?|¶\d+)\]\s*「([^」]+)」")
 
 
 def wilson(k, n):
@@ -47,7 +48,9 @@ def first_version(root, rel):
 
 def agrees(fm):
     c, v = str(fm.get("chosen") or "").strip(), str(fm.get("verdict") or "").strip()
-    return bool(c) and (c == v or c.startswith(AGREE_PREFIX))
+    option = r"(?:推荐\s*)?([A-Z])(?=$|[\s（(：:、.。])"
+    co, vo = (re.match(option, s.strip("*` ")) for s in (c, v))
+    return bool(c) and (c == v or c.startswith(AGREE_PREFIX) or bool(co and vo and co[1] == vo[1]))
 
 
 def ratio(k, n, pct=True):
@@ -83,7 +86,7 @@ def tool_stats(cfg, recs, docs, anchors, rule_ids):
                     if k in outcome or (k == "我对" and "你对" in outcome):
                         s["right"][k] += 1
         for m in RE_QUOTE.finditer(r["body"]):
-            doc, q = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+            doc, q = m.group(1) or m.group(3) or m.group(5), m.group(2) or m.group(4) or m.group(6)
             s["q_all"] += 1
             s["q_ok"] += any(re.sub(r"\s+", "", q) in re.sub(r"\s+", "", t) for t in docs.get(doc, []))
         for a in set(re.findall(r"\^p\d+", r["body"])):

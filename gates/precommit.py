@@ -1,6 +1,6 @@
 # The berserk lock (prohibition ①), the hardest of the layers: a git pre-commit hook.
 # What: a commit that touches a protected path (by default self/RULES.md · self/facts/** · tools/** minus the
-#       corpus; see plug.yaml protected/unprotected) without KB_APPROVE=1 is refused with one line of reason.
+#       corpus; policy from HEAD:plug.yaml, or working tree with a warning if absent) without KB_APPROVE=1 is refused.
 #       Every other commit: a staged record or proposal must have its shape (D75); nothing else is checked here,
 #       nothing is rebuilt or written, so the hook takes milliseconds. Stamps .kb/hooks/precommit.
 # In:   the git index (git diff --cached --name-only -z); tests and first contact can pass PLUG_STAGED instead
@@ -19,6 +19,7 @@
 # Deps: entryplug (pip install -e .); falls back to this repo's path when it is not installed.
 import os, subprocess, sys, time
 from pathlib import Path
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from entryplug import config  # noqa: E402
@@ -51,6 +52,21 @@ def stamp(cfg, name):
     (cfg["hooks_dir"] / name).write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8")
 
 
+def protection_policy(cfg):
+    """Only committed policy may relax protection; repositories without it retain the existing fallback."""
+    r = subprocess.run(["git", "show", "HEAD:plug.yaml"], cwd=str(cfg["root"]),
+                       capture_output=True, text=True, encoding="utf-8")
+    if r.returncode != 0:
+        print("berserk lock warning: HEAD has no readable plug.yaml; using working-tree protection policy", file=sys.stderr)
+        return cfg
+    raw = yaml.safe_load(r.stdout) or {}
+    policy = dict(cfg)
+    for key in ("protected", "unprotected", "protect"):
+        policy[key] = raw[key] if raw.get(key) is not None else config.DEFAULTS[key]
+    policy["tools"] = [dict(t, path=t.get("path", f"tools/{t['name']}")) for t in raw.get("tools") or []]
+    return policy
+
+
 def main():
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding="utf-8")
@@ -61,7 +77,8 @@ def main():
         return 1
     files = staged(cfg["root"])
     stamp(cfg, "precommit")
-    hit = [f for f in files if config.is_protected(cfg, f)]
+    policy = protection_policy(cfg)
+    hit = [f for f in files if config.is_protected(policy, f)]
     if hit and os.environ.get("KB_APPROVE") != "1":
         more = " (%d in total)" % len(hit) if len(hit) > 1 else ""
         print("berserk lock: this commit touches the protected path %s%s — rules and equipment can only be changed "

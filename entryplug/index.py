@@ -95,6 +95,8 @@ def file_rows(f, parsed, tool):
     """One content file → rows (tokens, id, doc, title, tool, kind, scope, file, lstart, lend, pos, excerpt)."""
     rel, area, fm, body = f["rel"], f["area"], parsed["fm"], parsed["body"]
     stem = f["path"].stem
+    if f["sub"] == "kit":
+        stem = "kit/" + rel.split("/kit/", 1)[1].rsplit(".", 1)[0]
     kind = {"dict": fm.get("kind", "concept"), "playbook": "playbook", "record": "record", "material": "material",
             "manual": "manual", "rules": "rule", "facts": "fact", "style": "style", "reading": "reading",
             "proposal": "proposal"}[area]
@@ -152,7 +154,11 @@ def build(cfg, full=False):
         elif f["area"] == "proposal" and f["sub"] != "pending":
             continue
         else:
-            p = shapes.parse_file(text, f["area"])
+            plain_kit = f["sub"] == "kit" and not text.startswith("---")
+            p = shapes.parse_file(text, None if plain_kit else f["area"])
+            if plain_kit:
+                heading = re.search(r"(?m)^#[ \t]+(.+)$", text)
+                p["fm"]["title"] = heading.group(1).strip() if heading else f["path"].stem
             stats["errors"] += ["%s: %s" % (f["rel"], e) for e in p["errors"]]
             rows = [] if fresh else file_rows(f, p, f["tool"])
             fm = p["fm"]

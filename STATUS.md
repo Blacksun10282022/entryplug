@@ -7,13 +7,13 @@ session — deny refusing an Edit, still refusing under bypass, carrying on afte
 are the MANUAL items of the acceptance script (C1.2 / C2.3 / C3.3 / C4.4). The owner fills the version numbers
 into this line once he has run them in his own pilot.
 
-The build machine has Claude Code 2.1.252 and codex-cli 0.128.0 (the version stamps `plug check --contact`
-reads). First contact is four-for-four green on both sides against a temporary copy of the example equipment
+At first build (2026-09-01) the machine had Claude Code 2.1.252 and codex-cli 0.128.0 (historical; the current
+versions are in the line above and at the end of this section). First contact is four-for-four green on both sides against a temporary copy of the example equipment
 (manual mirrored · Chinese MCP query non-zero · fake outbound action blocked · pre-commit refusing a protected
 write, plus the deny rules file checked).
 
 Machine itself: 2026-09-03 · Windows 11 · Python 3.12.4 · SQLite 3.45.3 (FTS5) · git 2.51.1 · jieba 0.42.1 —
-`python -m pytest` 127 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
+`python -m pytest` 127 passed (134 from 2026-09-07: seven tests added with the audit fixes — committed policy for pre-commit, read-only search, kit indexing, retired rule ids, narrowed outbound rules); `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL
 (the example equipment). Build machine: Claude Code 2.1.259, codex-cli 0.152.0.
 
 How the machine is measured: the locks by the acceptance script, retrieval by the public gold set (`plug eval`, the

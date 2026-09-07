@@ -58,7 +58,7 @@ def handle(cfg, msg):
             return {"content": [{"type": "text", "text": "query must not be empty"}], "isError": True}, None
         try:
             res = search.search(cfg, a["query"], scope=a.get("scope", "tools"), tool=a.get("tool"), kind=a.get("kind"),
-                                k=a.get("k", 8), per_doc=a.get("per_doc", 2))
+                                k=a.get("k", 8), per_doc=a.get("per_doc", 2), auto_index=False)
         except FileNotFoundError as e:           # no index: report as a tool error, not a protocol error
             return {"content": [{"type": "text", "text": str(e)}], "isError": True}, None
         return {"content": [{"type": "text", "text": search.format_rows(res)}], "isError": False}, None

@@ -181,7 +181,9 @@ def parse_rules(text):
             cur["lines"].append({"id": m.group(1), "text": m.group(2).strip(), "dated": bool(RE_DATE.search(m.group(2))),
                                  "review": r.group(1) if r else None})
     ids = {l["id"] for s in secs for l in s["lines"]}
-    return {"header": header, "sections": secs, "ids": ids, "retired": any("退役" in s["name"] for s in secs)}
+    retired_ids = {l["id"] for s in secs if "退役" in s["name"] for l in s["lines"]}
+    return {"header": header, "sections": secs, "ids": ids, "retired_ids": retired_ids,
+            "retired": any("退役" in s["name"] for s in secs)}
 
 
 def parse_doc(text, path, sub=None):

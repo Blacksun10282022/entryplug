@@ -4,8 +4,8 @@
 # In:   cfg · queries (str or list) · scope (tools default / corpus / all) · tool · kind · k (8 → max 60) · per_doc (2 → max 5).
 # Out:  {"rows": [...], "shown", "total", "queries"}; format_rows() renders text:
 #       id · source · file#Lstart-Lend [pos] · kind · excerpt (<=120 chars).
-# Not:  no reranking, no scoring, no window reading (that is the pilot's job, §8.1); physically cannot write
-#       content (read-only connection); never calls an LLM.
+# Not:  no reranking, no scoring, no window reading (that is the pilot's job, §8.1); auto_index=False never
+#       rebuilds the index or its generated files; retrieval uses a read-only connection and never calls an LLM.
 # Who:  cli (plug search) · mcp (tools/call search) · eval (recall@10) · contact (first contact, step 2).
 # Note: query construction (D22) — split on whitespace/punctuation; CJK runs of <=4 chars become a bigram phrase,
 #       longer runs use jieba words of >=2 chars; a single character becomes a prefix "X"*; latin words lowercased.
@@ -69,10 +69,11 @@ def dense_candidates(cfg, queries, scope):
 
 
 def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, auto_index=True):
-    if auto_index:                              # D76: a stale index is rebuilt on read; plug index is no longer a ritual
-        from . import index
-        if index.stale(cfg):
-            index.build(cfg)
+    from . import index
+    stale = index.stale(cfg)
+    if auto_index and stale:                   # D76 remains the ordinary CLI default; read-only callers opt out
+        index.build(cfg)
+        stale = False
     if isinstance(queries, str):
         queries = [queries]
     queries = [q for q in queries if q and q.strip()]
@@ -116,7 +117,10 @@ def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, au
     rows = [{"id": r[0], "doc": r[1], "source": r[2], "tool": r[3], "kind": r[4], "file": r[5], "lstart": r[6], "lend": r[7],
              "pos": r[8], "excerpt": r[9], "title_hit": any(len(q) >= 2 and q in titles.get(r[1], r[2]) for q in queries + expand(qtext, groups))}
             for r in shown]
-    return {"rows": rows, "shown": len(rows), "total": len(cands), "queries": used, "scope": scope, "built_at": meta.get("built_at")}
+    res = {"rows": rows, "shown": len(rows), "total": len(cands), "queries": used, "scope": scope, "built_at": meta.get("built_at")}
+    if stale:
+        res["warning"] = "stale; run plug index"
+    return res
 
 
 def format_rows(res):
@@ -131,4 +135,6 @@ def format_rows(res):
                 "corpus": " (corpus only; use scope=tools for dict · playbooks · records)"}.get(res.get("scope"), "")
         tail += " · no hit in scope %s%s · index built %s" % (res.get("scope"), hint, res.get("built_at") or "never (run plug index)")
     lines.append(tail)
+    if res.get("warning"):
+        lines.append(res["warning"])
     return "\n".join(lines)

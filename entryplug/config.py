@@ -232,6 +232,9 @@ def walk(cfg):
             add(p, "dict", n)
         for p in _md_files(d / "materials"):
             add(p, "material", n)
+        for p in sorted((d / "kit").rglob("*.md")):
+            if p.is_file():
+                add(p, "material", n, "kit")
         for sub in ("clean", "raw"):
             cd = d / "corpus" / sub
             if cd.is_dir():

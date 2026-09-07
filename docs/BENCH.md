@@ -71,12 +71,20 @@ Two rules, both learned from a judge that went wrong:
 
 Per equipment, per pilot, over the six situations:
 
-- the equipped arm **wins or ties on the summed score**, and
-- it **loses no single pair by more than two points**.
+- the equipped arm's summed score is **no more than 3 points below** the bare arm's (a tie or a win passes; the owner's line, 2026-09-04, the same line the private `workshop/*/bench/README.md` uses), and
+- **at most one pair** is lost by more than two points.
 
 Report the per-pair scores, the sum, and the win / tie / loss count, stamped with which judge, which model, which
-harness, and the date. A win on the sum with one bad blow-out is not a pass: the second clause is what stops a good
-average from hiding a case where the equipment actively hurt.
+harness, and the date. A win on the sum with two blow-outs is not a pass: the second clause is what stops a good
+average from hiding cases where the equipment actively hurt.
+
+What a count like "6/6" means: the number of pairs, out of six fixed situations, that one named judge preferred
+in one run. It is regression evidence for the manual's format, not an accuracy estimate for new situations: the
+six situations were chosen by the same person who wrote the manual and were reused across manual versions, and
+an equipped answer is recognisable by its shape (a strongest-counter paragraph, a "what would change the
+verdict" line) even with the A/B labels hidden. Under a stricter judge that reads the owner's materials the same
+manual scores a tie (see the register). Cite the judge, the manual version and the run with every number
+(audit 2026-09-07, A-04).
 
 These scores describe the owner's own iteration of his own manual on his own private situations, and they stay in
 the content repo's workshop. What is allowed to leave this repo is only what `bench/registry.md` permits: a

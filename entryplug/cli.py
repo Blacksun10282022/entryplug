@@ -47,6 +47,7 @@ def parser():
     p.add_argument("--tool"), p.add_argument("--kind")
     p.add_argument("--k", type=int, default=8), p.add_argument("--per-doc", type=int, default=2)
     p.add_argument("--json", action="store_true")
+    p.add_argument("--no-index", action="store_true", help="read the existing index without rebuilding; warn if stale")
     p = sub.add_parser("init", help="install the gates and pilot shells into a content repo (pre-commit · deny · hooks · .mcp.json · map · mirror); idempotent")
     p.add_argument("--pilot", choices=["claude-code", "codex", "both"], default="both")
     p.add_argument("--link-skills", action="store_true", help="also copy every SKILL.md into the user-level skills directory (manual trigger)")
@@ -99,7 +100,8 @@ def main(argv=None):
     if a.cmd == "search":
         from . import search
         try:
-            res = search.search(cfg, a.queries, scope=a.scope, tool=a.tool, kind=a.kind, k=a.k, per_doc=a.per_doc)
+            res = search.search(cfg, a.queries, scope=a.scope, tool=a.tool, kind=a.kind, k=a.k, per_doc=a.per_doc,
+                                auto_index=not a.no_index)
         except FileNotFoundError as e:
             print("plug: %s" % e, file=sys.stderr)
             return 1

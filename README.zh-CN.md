@@ -43,7 +43,7 @@ flowchart TD
 | 命令 | 作用 |
 |---|---|
 | `plug index` | 遍历内容仓，校验形状，切块，再分词（jieba 词加中日韩二元组）写进**一张 FTS5 表**；按文件哈希增量；生成人类可读的 `index.md` 和每件装备的 `playbooks/INDEX.md`，并把说明书镜像到各驾驶员的 skills 目录 |
-| `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索，轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活 |
+| `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索，轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活。走 MCP 时它从不重建，所以读就真的只是读；命令行仍会在作答前把过期索引重建一遍（D76），`--no-index` 关掉这个动作。两种情况下，索引过期都会在结果下面多出一行 `stale; run plug index`（2026-09-07 审计 X-04）|
 | `plug status` | 开机自检。每一层一行（索引、素体、deny + pre-commit、暴走封锁、出击封锁、装备舱、`.plug-off`），然后是一个同步率和一句判定。只有索引层自身不可用时才以非零退出 |
 | `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；一页报告加上同步率。从不给总分。`--contact claude-code\|codex` 跑四步的首次接触冒烟测试 |
 | `plug apply` | 批准一条改装申请：校验 base 短哈希，新增 / 替换 / 退役，以 0 ERROR 通过体检，然后 git 提交（trailer 里带提案 sha）。base 对不上就直接拒绝，从不悄悄覆盖。**仅限主人**：在 agent 环境里运行它会拒绝，并告诉主人怎么自己跑 |
@@ -52,9 +52,9 @@ flowchart TD
 
 两条禁令由 `gates/` 强制执行，不是靠提示词。
 
-**暴走封锁**（不要改规则或装备，不要造新装备；改成写一条改装申请）是一个 git pre-commit 钩子，加上 Claude Code 的 deny 规则。要知道 deny 那一半值多少：规则住在 `<content-repo>/.claude/settings.json` 里，只约束**项目根就是这个仓**的会话。一个从别处工作的 agent，另一个项目、一个机器仓、或一个临时目录，改这些文件时毫无阻拦，只有 pre-commit 拦得住结果落地。所以 pre-commit 是硬的那层，deny 是客气的那层。硬不等于密不透风：`--no-verify` 和 `KB_APPROVE=1` 是两个有记录在案的绕过方式，都会留下痕迹，也都归主人用。
+**暴走封锁**（不要改规则或装备，不要造新装备；改成写一条改装申请）是一个 git pre-commit 钩子，加上 Claude Code 的 deny 规则。要知道 deny 那一半值多少：规则住在 `<content-repo>/.claude/settings.json` 里，只约束**项目根就是这个仓**的会话。一个从别处工作的 agent，另一个项目、一个机器仓、或一个临时目录，改这些文件时毫无阻拦，只有 pre-commit 拦得住结果落地。所以 pre-commit 是硬的那层，deny 是客气的那层。它的保护策略读自 `git show HEAD:plug.yaml`，所以在工作区把 `unprotected:` 放宽、又不把这份配置暂存，什么也换不来（2026-09-07 审计 X-01）；HEAD 里没有 plug.yaml 时它退回工作区，并在 stderr 上说一声。硬不等于密不透风：`--no-verify` 和 `KB_APPROVE=1` 是两个有记录在案的绕过方式，都会留下痕迹，也都归主人用。
 
-**出击封锁**（不以主人的名义送出任何东西；先问）是一个 PreToolUse 钩子，一份 Claude Code 和 Codex 共用的名单，两边都真的拦得住。决定是一个退出码为 0 的进程在 stdout 上打出的一行 JSON：`hookSpecificOutput.permissionDecision: "deny"`，配一个非空的 `permissionDecisionReason`，在每个驾驶员上都实机验证过（D65）。钩子接到了每个能跑命令或对外发布的工具：Bash、PowerShell、WebFetch、Artifact 和所有 MCP 工具。Codex 自己的 `approval_policy` 和 `sandbox_mode` 叠在上面当第二层；`plug check --contact codex` 会把两者都打出来，让你看清还有什么挡着或没挡着。此外还有一个压缩固定项和一个 Stop 钩子记录提醒，都是提醒级。
+**出击封锁**（不以主人的名义送出任何东西；先问）是一个 PreToolUse 钩子，一份 Claude Code 和 Codex 共用的名单。它是常见对外写命令的绊线，不是沙箱：读放行（不带写方法的 curl/wget、WebFetch、读邮件），名单上的写形式拒绝（带写方法或上传参数的 curl/wget、PowerShell 的 -Method Post/-Body、Python 的 requests.post/httpx/smtplib、ssh/scp/sendmail、git push、gh、Artifact、MCP 的 send/reply/forward/submit/pay/publish），名单外的它看不见：任意代码的网络写入、浏览器点击（2026-09-07 审计 X-02）。决定是一个退出码为 0 的进程在 stdout 上打出的一行 JSON：`hookSpecificOutput.permissionDecision: "deny"`，配一个非空的 `permissionDecisionReason`，在每个驾驶员上都实机验证过（D65）。钩子接到了每个能跑命令或对外发布的工具：Bash、PowerShell、WebFetch、Artifact 和所有 MCP 工具。Codex 自己的 `approval_policy` 和 `sandbox_mode` 叠在上面当第二层；`plug check --contact codex` 会把两者都打出来，让你看清还有什么挡着或没挡着。此外还有一个压缩固定项和一个 Stop 钩子记录提醒，都是提醒级。
 
 ## 为什么会有它
 
@@ -63,6 +63,8 @@ flowchart TD
 2026-09-02 的一次全面复查，找出八个缺陷，绿的测试套件和绿的验收脚本都放它们过去了。每一个都在封锁真正的强度上。出击封锁从没看见过 PowerShell 工具。pre-commit 在 git 默认的 `quotePath` 下读不出中文文件名，于是把那些文件悄悄地留在了没保护的状态。两个环境变量能改掉 pre-commit 检查的对象。每个修复都带着一个在旧代码上会失败的测试落地（D65 到 D72），每个都在第二天用两个驾驶员的实机会话重新验证过。
 
 接着机器是被砍，不是被养大。开机面板离开了模型的上下文，去了主人的屏幕。pre-commit 被削到只做拒绝、别的都不做。索引学会了在读取时自己重建。记录提醒被改成一次会话只提醒一遍（D73 到 D79）。
+
+2026-09-07 一次外部审计以只读的方式读了两个仓，找出两条绕过封锁的路。pre-commit 的保护策略取自工作区，于是一行没有提交的 `unprotected:` 就能替一次并不包含这行的提交解开保护路径。而出击封锁是一份命令拼法的名单：一个普通的 `requests.post(...)` 写在钩子确实匹配到的 Bash 调用里，它从来没看见。两条都在当天修掉，各配一个在旧代码上会失败的测试，测试从 127 个变成 134 个。审计自带的修复计划大半没有采纳：主键、迁移作业、交叉矩阵、签认流程，这些是给多人产品做的，而这是一个人自己用的工具。除了那两个洞，审计值钱的地方是措辞：这份 README 里有几处说法比代码更满，现在改成代码真正做到的样子。
 
 有一次一个盲评委仅凭文件名就写出了一份完整、笃定的判定，因为它的读文件工具被拒了。有一条规则就是从这来的：一份判定必须引用两处你能在正文里找到的具体内容，否则作废（`docs/BENCH.md`）。
 
@@ -182,7 +184,7 @@ python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FA
 | 指标 | 结果 | 复现 | 截至 |
 |---|---|---|---|
 | 两道封锁（验收） | 24 项自动 PASS，0 FAIL，4 项人工 | `python tests/acceptance.py` | 2026-09-05 |
-| 命令与闸门（单元测试） | 127 通过 | `python -m pytest` | 2026-09-05 |
+| 命令与闸门（单元测试） | 134 通过 | `python -m pytest` | 2026-09-07 |
 | 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-09-05 |
 
 有一个测试（`tests/test_eval_goldset.py`）把召回压在 0.93 的下限，并断言中文召回永不为零。
@@ -199,6 +201,8 @@ python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FA
 | B | GPT-6-astra | Fable 5.1 | 6/6 | 0.61 到 1.00 |
 | B | Opus 5 | GPT-5.6 | 6/6 | 0.61 到 1.00 |
 | B | GPT-5.6 | GPT-6-astra（读主人所引材料）| 6/6 | 0.61 到 1.00 |
+
+那个 `6/6` 要按它数的东西读：一个指名的评委在一轮里选中带装备的对子数，六个处境由说明书作者本人挑选、并在各版之间反复使用。在那个会去读主人所引材料的更严评委下，说明书 A 的最新版在三个驾驶员上过线、在第四个上没过；而每一行标着 2026-09-05 的登记，都是跑完之后补写的，不是跑之前登记的。这两点写在 `bench/registry.md` 里，通过线写在 `docs/BENCH.md` 里。
 
 其余每一行，包括那个会去读主人所引材料、并把自己打不开的事实扣分的评委，都在 `bench/registry.md` 里。这里不公布任何 LLM 评委给出的质量分：离开这个仓的，只是一个登记过的比例连同它的区间，从不是评委的某个数，也从不是一个总分。按每份回答计量，带装备那份的成本是裸模型的 3 到 17 倍；逐例成本表留在内容仓的 workshop 里。
 

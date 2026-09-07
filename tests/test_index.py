@@ -83,6 +83,28 @@ def test_tokens_two_char_word_and_bigrams():
     assert "诡道" in t and "兵者" in t and "deception" in t and "101" in t and "道也" in t and "者诡" not in t
 
 
+def test_registered_kit_markdown_is_searchable_without_material_frontmatter(repo):
+    from entryplug import check, config, search
+    kit = repo["tools"][0]["dir"] / "kit"
+    (kit / "nested").mkdir(parents=True)
+    (kit / "print").mkdir()
+    (kit / "README.md").write_text("# Reading notes\nkitsharedprobe\n", encoding="utf-8")
+    (kit / "nested" / "README.md").write_text("# Nested guide\nkitsharedprobe\n", encoding="utf-8")
+    (kit / "notes.md").write_text("kitfilenameprobe\n", encoding="utf-8")
+    (kit / "print" / "guide.html").write_text("kitprintprobe", encoding="utf-8")
+    walked = [f for f in config.walk(repo) if f["sub"] == "kit"]
+    assert len(walked) == 3 and all(f["area"] == "material" and f["tool"] == "sunzi" for f in walked)
+    assert index.build(repo)["errors"] == []
+    hits = search.search(repo, "kitsharedprobe", auto_index=False)["rows"]
+    assert {h["id"] for h in hits} == {"kit/README", "kit/nested/README"}
+    assert {h["source"] for h in hits} == {"Reading notes", "Nested guide"}
+    assert {h["file"] for h in hits} == {"tools/sunzi/kit/README.md", "tools/sunzi/kit/nested/README.md"}
+    assert all(h["kind"] == "material" for h in hits)
+    assert search.search(repo, "kitfilenameprobe", auto_index=False)["rows"][0]["source"] == "notes"
+    assert not search.search(repo, "kitprintprobe", auto_index=False)["rows"]
+    assert not check.run(repo, expire=False, tool_checks=False)["errors"]
+
+
 def test_cli_index_reports_shape_errors(repo):
     (repo["root"] / "tools/sunzi/dict/bad.md").write_text("---\nkind: concept\n---\nno title\n", encoding="utf-8")
     r = plug(repo["root"], "index")

@@ -66,15 +66,16 @@ def test_zero_hits_explain_scope_and_a_missing_index_is_rebuilt_on_read(repo):
     assert r.stdout.startswith("BV1EXAMPLE01#5")
     text = search.format_rows(search.search(repo, "责任", scope="corpus"))
     assert "showing 1/1" in text.splitlines()[-1] and "no hit" not in text
-    repo["index_path"].unlink()                                   # D76: a missing index is rebuilt on read, on the CLI and over MCP
+    repo["index_path"].unlink()                                   # D76: the ordinary CLI still rebuilds a missing index
     r = plug(repo["root"], "search", "责任")
     assert r.returncode == 0 and r.stdout.startswith("showing 0/0 · no hit in scope tools") and repo["index_path"].exists()
     repo["index_path"].unlink()
     from entryplug import mcp
     res, err = mcp.handle(repo, {"method": "tools/call", "params": {"name": "search", "arguments": {"query": "责任", "scope": "corpus"}}})
-    assert err is None and res["isError"] is False and "BV1EXAMPLE01#5" in res["content"][0]["text"]
-    repo["index_path"].unlink()
-    with pytest.raises(FileNotFoundError, match="run plug index first"):       # only a caller that opts out stays loud (plug status)
+    assert err is None and res["isError"] is True and "run plug index first" in res["content"][0]["text"]
+    r = plug(repo["root"], "search", "责任", "--no-index")
+    assert r.returncode == 1 and "run plug index first" in r.stderr and not repo["index_path"].exists()
+    with pytest.raises(FileNotFoundError, match="run plug index first"):       # read-only callers report the missing index
         search.search(repo, "责任", auto_index=False)
 
 
@@ -97,3 +98,26 @@ def test_a_stale_index_is_rebuilt_on_read(repo):
     assert not index.stale(repo)
     assert search.search(repo, "自动重建索引", auto_index=False)["total"] > 0
 
+
+def test_mcp_and_cli_no_index_warn_without_rebuilding(repo):
+    import io
+    from entryplug import index, mcp
+    before = repo["index_path"].read_bytes()
+    page = repo["root"] / "tools/sunzi/dict/shi.md"
+    page.write_text(page.read_text(encoding="utf-8") + "\nnewstaleword\n", encoding="utf-8", newline="\n")
+    assert index.stale(repo)
+    msg = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+           "params": {"name": "search", "arguments": {"query": "newstaleword"}}}
+    out = io.BytesIO()
+    mcp.serve(repo, io.BytesIO((json.dumps(msg) + "\n").encode("utf-8")), out)
+    result = json.loads(out.getvalue())["result"]           # warning stays inside the single JSON-RPC response
+    text = result["content"][0]["text"]
+    assert not result["isError"] and "showing 0/0" in text and text.count("stale; run plug index") == 1
+    r = plug(repo["root"], "search", "newstaleword", "--no-index")
+    assert r.returncode == 0 and "showing 0/0" in r.stdout and r.stdout.count("stale; run plug index") == 1
+    r = plug(repo["root"], "search", "newstaleword", "--no-index", "--json")
+    result = json.loads(r.stdout)
+    assert r.returncode == 0 and result["total"] == 0 and result["warning"] == "stale; run plug index"
+    assert repo["index_path"].read_bytes() == before and index.stale(repo)
+    r = plug(repo["root"], "search", "newstaleword", "--json")
+    assert r.returncode == 0 and json.loads(r.stdout)["total"] > 0 and not index.stale(repo)

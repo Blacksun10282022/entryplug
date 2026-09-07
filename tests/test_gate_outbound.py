@@ -118,3 +118,41 @@ def test_git_push_rule_reads_the_subcommand_not_the_word(repo):
     for cmd in ("git push", "git -C /repo push origin main", "git -c user.name=x push", "git --no-pager push", "gh pr create -f", "cd x; gh release upload v1 f"):
         r = hook(root, {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(root)})
         assert denied(r), (cmd, r.stdout)
+
+
+def test_narrow_outbound_rules_block_python_post_and_allow_reads(repo):
+    """Content-config policy: read calls pass, common write calls still hit the unchanged gate."""
+    import yaml
+    rules = [
+        {
+            "tool": "^(Bash|PowerShell|shell)$",
+            "match": "(?i:\\b(?:curl|wget)(?:\\.exe)?\\b)[^\\r\\n;&|]*(?:\\s-X\\s*(?i:POST|PUT|PATCH|DELETE)\\b|\\s-(?:d|F|T)(?:\\S*|\\s|$)|\\s--(?:data[\\w-]*|form(?:-string)?|upload-file|post-data|post-file)(?:[=\\s]|$))"
+        },
+        {
+            "tool": "^(Bash|PowerShell|shell)$",
+            "match": "(?i)\\b(?:Invoke-WebRequest|Invoke-RestMethod)\\b[^\\r\\n;|]*(?:\\s-Method\\s+['\"]?(?:Post|Put|Patch|Delete)\\b|\\s-Body\\b)|\\bSend-MailMessage\\b"
+        },
+        {
+            "tool": "^(Bash|PowerShell|shell)$",
+            "match": "(?s)\\b(?:requests\\.(?:post|put|patch|delete)|httpx\\.(?:post|put))\\s*\\(|\\burllib\\b.*?\\bdata\\s*=|\\bsmtplib\\b"
+        },
+        {
+            "tool": "^(Bash|PowerShell|shell)$",
+            "match": "(?i)\\b(?:ssh|scp|sendmail)\\b"
+        }
+    ]
+    rules += repo["outbound"][1:-1]  # retain git push, gh and Artifact rules
+    rules += [{"tool": "(?i)^mcp__.*(send_|reply|forward|submit|pay|publish|post_)"}]
+    config_path = repo["root"] / "plug.yaml"
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    raw["outbound"] = rules
+    config_path.write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    for command in ("requests.post('https://example.invalid', data={})", "curl -X POST https://example.invalid"):
+        assert denied(hook(repo["root"], {"tool_name": "Bash", "tool_input": {"command": command}}))
+    for command in ("curl https://example.invalid", "curl -D headers.txt https://example.invalid",
+                    "Invoke-WebRequest https://example.invalid"):
+        result = hook(repo["root"], {"tool_name": "Bash", "tool_input": {"command": command}})
+        assert result.returncode == 0 and not result.stdout.strip()
+    result = hook(repo["root"], {"tool_name": "mcp__mail__get_message", "tool_input": {"id": "test"}})
+    assert result.returncode == 0 and not result.stdout.strip()
+    assert denied(hook(repo["root"], {"tool_name": "mcp__mail__send_email", "tool_input": {"to": "a@example.invalid"}}))

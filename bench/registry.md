@@ -29,6 +29,8 @@ Interval = Wilson 95% on the proportion of the six situations where the blind ju
 | 2026-09-05 | B line | B · pilot gpt-5.6 · judge gpt-6-astra (reads the materials) | 6 | 6/6 = 1.00 [0.61, 1.00] | - | - | - | 5.4x tokens | 6/6 under the judge that read the owner's materials; 3W 1T 2L under judge gpt-5.6 and 2W 2T 2L under judge fable 5.1 |
 | 2026-09-05 | B line | B · pilot Opus 5 · judge gpt-6-astra (reads the materials) | 6 | 5/6 = 0.83 [0.44, 0.97] | - | - | - | 3x $ | 5W 0T 1L under the judge that read the owner's materials |
 
+Backfill note (2026-09-07): every row dated 2026-09-05 was written on 2026-09-05 *after* the runs it describes (the register was created that day, commit eb81528), so they are records, not pre-registrations. Manual versions, which the rows above do not say: the A rows judged by fable 5.1 and the two A rows judged by gpt-6-astra (reads the materials) are manual **v1.4**; the B rows are jobhunt v1.1. Results for analysis **v1.5** under the judge that reads the materials, taken from the workshop archives (`round6_v15_*`): pilot fable 5.1 99:99, 3W 0T 3L, two pairs lost by more than two (fails the pass line); pilot Opus 5 105:100, 4W 0T 2L; pilot gpt-5.6 121:114, 3W 2T 1L; pilot gpt-6-astra 137:137, 4W 0T 2L. From here on a row is written before the run, with the manual hash in the note.
+
 ## Drift table (a line per model change or rerun; a drop gets registered too)
 
 | date | model · harness | register line | change |

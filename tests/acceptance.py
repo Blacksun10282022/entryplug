@@ -177,7 +177,7 @@ def c4(root):
     bys = " ".join(p.read_text(encoding="utf-8") for p in (root / "self/records").glob("*.md"))
     item("C4.3", "the by field of the records names both pilots (claude-code · codex), so the same situation can be compared",
          "claude-code ·" in bys and "codex ·" in bys)
-    item("C4.4", "open the same repo in Codex: its first sentence names the situation, the record file and the pending proposals, and says Codex has no deny; then switch back",
+    item("C4.4", "open the same repo in Codex: it runs plug status first and says out loud that Codex has no deny (AGENTS.md); when the owner names an equipment its first word is the judgment, with no announcement of the record file or the equipment; then switch back",
          manual=True)
 
 

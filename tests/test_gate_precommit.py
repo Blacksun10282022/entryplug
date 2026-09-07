@@ -19,7 +19,9 @@ def test_protected_paths_refused_one_line_reason(repo):
     root = repo["root"]
     for path in ("self/RULES.md", "self/facts/example.md", "tools/sunzi/dict/shi.md", "tools/sunzi/SKILL.md", "tools/sunzi/materials/x.md", "plug.yaml"):
         r = run_gate(root, [path])
-        assert r.returncode == 1 and r.stderr.count("\n") == 1 and "berserk lock" in r.stderr and path in r.stderr, (path, r.stderr)
+        lines = r.stderr.splitlines()
+        assert len(lines) == 2 and "HEAD has no readable plug.yaml" in lines[0], r.stderr
+        assert r.returncode == 1 and "berserk lock" in lines[1] and path in lines[1], (path, r.stderr)
     assert (repo["hooks_dir"] / "precommit").exists()
 
 
@@ -94,6 +96,20 @@ def real_hook(root):
     hook.write_text("#!/bin/sh\nexec \"%s\" \"%s\"\n" % (sys.executable.replace("\\", "/"), str(GATE).replace("\\", "/")), encoding="utf-8")
     env = {k: v for k, v in os.environ.items() if k not in ("KB_APPROVE", "PLUG_STAGED", "PLUG_ROOT")}
     return lambda *a, **k: subprocess.run(["git", "-c", "commit.gpgsign=false", *a], cwd=str(root), capture_output=True, text=True, encoding="utf-8", env=dict(env, **k.get("env", {})))
+
+
+def test_unstaged_unprotected_change_cannot_relax_committed_policy(git_repo):
+    root = git_repo["root"]
+    g = real_hook(root)
+    rules = root / "self/RULES.md"
+    rules.write_text(rules.read_text(encoding="utf-8") + "- J9 · staged change [2026-09]\n", encoding="utf-8")
+    assert g("add", "self/RULES.md").returncode == 0
+    y = root / "plug.yaml"
+    y.write_text(y.read_text(encoding="utf-8") + '\nunprotected: ["self/RULES.md"]\n', encoding="utf-8")
+    assert g("diff", "--cached", "--name-only").stdout.strip() == "self/RULES.md"
+    r = g("commit", "-q", "-m", "relax only the working-tree policy")
+    assert r.returncode != 0 and "berserk lock" in r.stderr and "self/RULES.md" in r.stderr, r.stderr
+    assert "staged change" not in g("show", "HEAD:self/RULES.md").stdout
 
 
 def test_non_ascii_protected_path_is_refused_under_default_quotepath(git_repo):

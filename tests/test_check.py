@@ -1,7 +1,7 @@
 # Verb check: 0 ERROR on the example equipment; every kind of ERROR broken once in a temporary copy; the main
 # WARNINGs; expired proposals moving house; the header self-check; the blind-valid arithmetic on the numbers page.
 from datetime import date
-from entryplug import check, index, report
+from entryplug import check, index, numbers, report
 from conftest import git, plug
 
 TODAY = date(2026, 8, 29)
@@ -69,6 +69,16 @@ def test_error_record_rule_id_missing(repo):
     edit(repo["root"], "self/records/2026-08-27-choose-venue.md", "J1 · 先算", "J9 · 先算")
     r = run(repo)
     assert "rid" in codes(r) and any("J9" in f["msg"] for f in r["errors"])
+
+
+def test_retired_rule_reference_is_a_warning(repo):
+    rel = "self/records/2026-08-27-choose-venue.md"
+    edit(repo["root"], rel, "J1 · 先算", "J0 · 先算")
+    r = check.run(repo, expire=False, tool_checks=False, today=TODAY)
+    assert r["rules"]["retired_ids"] == {"J0"} and "J0" in r["rules"]["ids"]
+    retired = [w for w in r["warnings"] if w["code"] == "rid_retired"]
+    assert len(retired) == 1 and retired[0]["level"] == "WARNING" and retired[0]["file"] == rel
+    assert "J0" in retired[0]["msg"] and not r["errors"]
 
 
 def test_error_cross_tool_link_without_dependency(repo):
@@ -152,6 +162,24 @@ def test_numbers_blind_check_uses_git_history(git_repo):
     assert "| agreement rate (blind-valid) | 1/1" in page and "(3 non-blind excluded)" in page
     assert "| rule references real | 6/6 |" in page and "| quotes verifiable | 6/6 |" in page
     assert "unclear 1" in page and "unanswered 1" in page
+
+
+def test_numbers_quotes_accept_title_and_position(repo):
+    quotes = ("《孙子兵法｜兵势第五》[1:23]「激水之疾，至于漂石者，势也」\n"
+              "《孙子兵法｜兵势第五》[¶3]「故善战者，其势险，其节短」\n"
+              "《孙子兵法｜兵势第五》[1:23]「这句不在原文中」\n")
+    edit(repo["root"], "self/records/2026-08-27-choose-venue.md", "## 最强反证", quotes + "## 最强反证")
+    r = check.run(repo, expire=False, tool_checks=False, today=TODAY)
+    assert "| quotes verifiable | 8/9 |" in r["numbers"]
+
+
+def test_numbers_agreement_recognizes_option_letters():
+    assert numbers.agrees({"verdict": "推荐 A", "chosen": "A"})
+    assert numbers.agrees({"verdict": "推荐 A", "chosen": "**A（同意）**"})
+    assert not numbers.agrees({"verdict": "推荐 A", "chosen": "B"})
+    assert not numbers.agrees({"verdict": "Avoid this", "chosen": "A"})
+
+
 LYING_MAP = "# map\n- Sortie lock: on this side the hook only records; it cannot veto a tool call.\n"
 HONEST_MAP = "# map\n- Sortie lock: anything outward is blocked by a hook - ask him first.\n"
 
