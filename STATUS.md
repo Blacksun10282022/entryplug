@@ -7,6 +7,13 @@ session — deny refusing an Edit, still refusing under bypass, carrying on afte
 are the MANUAL items of the acceptance script (C1.2 / C2.3 / C3.3 / C4.4). The owner fills the version numbers
 into this line once he has run them in his own pilot.
 
+Reading order (added 2026-09-21): the sections below are dated and kept as written. Where a later section changes a
+mechanism an earlier one described — the sortie lock's exit codes (D65, 2026-09-03: the deny JSON with exit 0 on both
+pilots, superseding the two-exit-code text under 2026-09-03/D56), what pre-commit does (D75, 2026-09-04: it refuses and
+does nothing else; it no longer rebuilds the index or runs the check-up on every commit), the index rebuild timing (D47,
+then D75) — the later section and `docs/DECISIONS.md` are current and the earlier paragraph is history. The open items
+are the MANUAL ones named above.
+
 At first build (2026-09-01) the machine had Claude Code 2.1.252 and codex-cli 0.128.0 (historical; the current
 versions are in the line above and at the end of this section). First contact is four-for-four green on both sides against a temporary copy of the example equipment
 (manual mirrored · Chinese MCP query non-zero · fake outbound action blocked · pre-commit refusing a protected

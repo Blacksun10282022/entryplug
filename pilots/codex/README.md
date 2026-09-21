@@ -47,7 +47,7 @@ Codex's hook file is **not** Claude Code's, and getting it wrong fails silently-
 `Failed` and nothing runs.
 
 ```json
-{ "hooks": { "PreToolUse": [ { "matcher": "Bash|shell|mcp__.*",
+{ "hooks": { "PreToolUse": [ { "matcher": "Bash|PowerShell|shell|mcp__.*",
   "hooks": [ { "type": "command", "command": "C:/py/python.exe C:/repo/gates/outbound.py", "timeout": 30 } ] } ] } }
 ```
 

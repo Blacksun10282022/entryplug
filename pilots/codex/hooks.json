@@ -9,24 +9,24 @@
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell|shell|mcp__.*",
-        "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/outbound.py\"", "timeout": 30 }]
+        "hooks": [{ "type": "command", "command": "python //c/<entryplug-repo>/gates/outbound.py", "timeout": 30 }]
       }
     ],
     "PreCompact": [
-      { "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\"", "timeout": 30 }] }
+      { "hooks": [{ "type": "command", "command": "python //c/<entryplug-repo>/gates/precompact.py", "timeout": 30 }] }
     ],
     "SessionStart": [
       {
         "matcher": "compact",
-        "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/precompact.py\" --emit", "timeout": 30 }]
+        "hooks": [{ "type": "command", "command": "python //c/<entryplug-repo>/gates/precompact.py --emit", "timeout": 30 }]
       },
       {
         "matcher": "startup|resume|clear",
-        "hooks": [{ "type": "command", "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 }]
+        "hooks": [{ "type": "command", "command": "python -m entryplug.cli --root //c/<content-repo> status --emit", "timeout": 30 }]
       }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "python \"//c/<entryplug-repo>/gates/stop.py\"", "timeout": 20 }] }
+      { "hooks": [{ "type": "command", "command": "python //c/<entryplug-repo>/gates/stop.py", "timeout": 20 }] }
     ]
   }
 }
