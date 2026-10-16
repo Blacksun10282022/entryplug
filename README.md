@@ -2,6 +2,21 @@ English | [简体中文](README.zh-CN.md)
 
 # entryplug · Entry Plug
 
+## In plain words
+
+EntryPlug is a governance layer for AI coding agents (Claude Code and Codex): a small CLI plus a read-only MCP server. One person writes down their rules, facts and past decisions; the agent searches them over MCP and works from them. EntryPlug's job is to keep the agent from changing them, and from sending anything out in that person's name without asking first.
+
+Both limits are enforced in code, not in the prompt:
+
+- **Protected files.** A Git pre-commit hook plus Claude Code deny rules refuse changes to the person's rules, facts and approved tools. The agent writes a change request instead; only the owner can apply it.
+- **Outbound actions.** A PreToolUse hook refuses the common outbound write commands (`git push`, `gh`, HTTP POST, mail, publish and send tools), verified live in both Claude Code and Codex. It is a tripwire, not a sandbox: code outside its list can still reach the network.
+
+Measured (details in [How it is measured](#how-it-is-measured)): retrieval recall@10 is 0.98 on a public 50-case gold set; the locks pass an acceptance script (24 automated checks, 4 verified by hand in live sessions); 134 unit tests. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
+
+The rest of this README uses the project's own vocabulary: the agent is the **pilot**, the person's notes are the **Base**, their tools are **Equipment**, and the two limits are the **berserk lock** and the **sortie lock**.
+
+---
+
 entryplug is the plug that lets a coding agent work from one person's written judgment without ever rewriting it. Three file shapes, one read-only search interface, two machine-enforced locks, one self-check. It does not judge, it does not orchestrate, and it does not learn on its own. A Sunzi example equipment ships with it, so the acceptance script and a reproducible benchmark both run in five minutes. This is something I use myself. It is not a general-purpose product.
 
 *Entryplug is the plug any pilot (Claude Code or Codex) inserts into one person's **Base** (rules, flight log, facts) to fight with that person's **Equipment** (tools). The owner never pilots; the pilot never edits the Base. The pattern is called **Base and Equipment**.*
