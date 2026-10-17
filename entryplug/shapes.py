@@ -149,15 +149,33 @@ def parse_file(text, area):
             "links": links(body), "obs": parse_observations(body) if shape == "entry" else []}
 
 
-def rule_refs(text, ids):
-    """Rule ids named in text, restricted to the prefixes that actually occur in RULES.md. One definition, used by
-    check (does the id exist?) and numbers (is the reference real?), so the two can never drift apart. The
-    lowercase suffix is part of the id: without it P2a matched nothing at all — the reference was not misjudged,
-    it was invisible, because the trailing letter broke the word-boundary lookahead."""
+def rule_citations(text, ids):
+    """Every rule-id-shaped token in text, with whether it is written as a rule citation: on a line that names
+    RULES, under a heading that says 规则, or in the rule-line form `X9 · …`. Prefixes are the ones that occur in
+    RULES.md; the lowercase suffix is part of the id (without it P2a matched nothing at all — the trailing letter
+    broke the word-boundary lookahead). A cited token that does not exist is a broken reference; an uncited one is
+    usually a name that only looks like an id — an MV plate P1c-…, a priority P0, AWS S3, a P10–P90 range, a source
+    label S2 — and is not a reference at all (D82). 2026-10-17 in unit-01: all 47 rid ERRORs were uncited names,
+    and 1,426 of the 1,685 real references were cited, so the rule keeps most of the net."""
     if not ids:
         return []
     pre = "|".join(sorted({re.match(r"[A-Z]+", i).group(0) for i in ids}))
-    return re.findall(r"(?<![A-Za-z0-9])((?:%s)\d{1,3}[a-z]?)(?![A-Za-z0-9])" % pre, text)
+    pat = re.compile(r"(?<![A-Za-z0-9])((?:%s)\d{1,3}[a-z]?)(?![A-Za-z0-9])" % pre)
+    out, head = [], ""
+    for line in text.splitlines():
+        h = re.match(r"\s*#{2,6}\s*(.*)", line)
+        if h:
+            head = h.group(1)
+        for m in pat.finditer(line):
+            out.append((m.group(1), "RULES" in line or "规则" in head or line[m.end():].startswith(" · ")))
+    return out
+
+
+def rule_refs(text, ids):
+    """Rule references named in text: every cited token, plus an uncited one that is a real rule id (prose like
+    「按 D3」 still counts). An uncited token that is not a rule id is a name, not a reference. One definition, used by
+    check (does the id exist?) and numbers (is the reference real?), so the two can never drift apart."""
+    return [rid for rid, cited in rule_citations(text, ids) if cited or rid in ids]
 
 
 def parse_rules(text):

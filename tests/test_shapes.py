@@ -86,3 +86,18 @@ def test_parse_doc_three_formats():
     assert d["id"] == "b1" and d["kind"] == "book" and d["units"][0][0] == 7 and "第二行" in d["text"]
     d = shapes.parse_doc("# 标题\n正文。\n", Path("x/plain.md"), "raw")
     assert d["id"] == "plain" and d["title"] == "标题"
+
+
+def test_rule_citations_tell_a_citation_from_a_name():
+    """D82: cited = a line naming RULES, a heading that says 规则, or the rule-line form `X9 · …`. An uncited token
+    that is a real rule id still counts as a reference (prose like 「按 D3」); an uncited unknown one is a name."""
+    ids = {"D3", "P2a", "S1"}
+    text = ("按 D3 不当场答应；底图 `P1c-signal.png` 与 S3 桶\n"
+            "**[有据 · RULES D9]** 引错了\n"
+            "S7 · 一条照抄的规则行\n"
+            "### 规则（义3）\n- P2a 与 D4\n"
+            "### 上次\n- P0 优先级\n")
+    got = shapes.rule_citations(text, ids)
+    assert got == [("D3", False), ("P1c", False), ("S3", False), ("D9", True), ("S7", True),
+                   ("P2a", True), ("D4", True), ("P0", False)]
+    assert shapes.rule_refs(text, ids) == ["D3", "D9", "S7", "P2a", "D4"]

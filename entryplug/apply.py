@@ -1,21 +1,23 @@
 # What: `plug apply <proposal>` — approve one refit request: verify the base short hash → land it as add / replace
-#       / retire → plug check with 0 ERROR → git commit (the proposal sha goes in a trailer).
+#       / retire → plug check adds no new ERROR → git commit (the proposal sha goes in a trailer).
 #       `--reject REASON` moves it to rejected/ with a reason line. `--dry-run` only shows the diff.
 # In:   cfg · proposal path (relative to the content repo, or absolute). The proposal's 「改成什么」 section holds
 #       one fenced code block = the whole new file; or its first line is `retire` (D03).
 # Out:  the target file lands · the proposal moves to proposals/applied/ · one git commit (KB_APPROVE=1 is set
 #       here and nowhere else) holding only the landed paths (--only: anything else already staged stays
 #       staged, D69); the diff and the result go to stdout; exit code 0 / 1.
-# Not:  a base mismatch (the target has changed) is refused outright, never silently overwritten; a check ERROR
-#       rolls everything back; directories are not approved (a new equipment draft in proposals/tools/ is mounted
+# Not:  a base mismatch (the target has changed) is refused outright, never silently overwritten; an ERROR the
+#       change introduces rolls everything back (ERRORs the repo already carried before it are counted, not
+#       blocking — D81); directories are not approved (a new equipment draft in proposals/tools/ is mounted
 #       into plug.yaml by the owner by hand). Approval is the owner's move: an agent environment is refused.
 # Who:  the owner, in a terminal. A pilot has no business calling it — all a pilot may write is the proposal.
 # Note: base (D02) = the git blob short hash of the target's current content (first 8 chars, same value as
 #       `plug hash <file>` and `git hash-object`); a new file is written `base: new`. add / replace / retire
 #       follow from whether the target exists and from the body (§5.1); retire = move to retired/ alongside it.
 #       Commit message: `apply: <action> <target>` + blank line + `Proposal: <rel>` + `Proposal-Sha: <sha256[:12]>`.
-# Deps: stdlib (difflib · hashlib · subprocess only for git) · shapes · index · check.
+# Deps: stdlib (collections · difflib · hashlib · subprocess only for git) · shapes · index · check.
 import difflib, hashlib, os, re, shutil, subprocess
+from collections import Counter
 from datetime import date
 from pathlib import Path
 from . import config, shapes
@@ -26,8 +28,29 @@ AGENT_ENV = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CL
              "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CURSOR_AGENT", "AIDER_CHAT")
 
 
+# The one check that blocks whether or not it was already there: it means the check refused to read the repo at
+# all, so the absence of a new ERROR behind it proves nothing.
+ALWAYS_BLOCK = ("shape_version",)
+
+
 def blob_hash(data):
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()[:8]
+
+
+def new_errors(before, after):
+    """The ERRORs `after` holds that `before` did not, compared as a multiset on (code, file, msg) — never on the
+    timestamp — so the same finding twice in one file still counts twice. The gate is «adds no new ERROR», not
+    «the repo is clean»: a repo already red for reasons a proposal never touched would otherwise wall every
+    approval (2026-10-17: 47 rid hits in sixteen older records rolled back a one-line rule change; D81)."""
+    left = Counter((e["code"], e["file"], e["msg"]) for e in before)
+    out = []
+    for e in after:
+        k = (e["code"], e["file"], e["msg"])
+        if left[k] > 0:
+            left[k] -= 1
+        else:
+            out.append(e)
+    return out + [e for e in after if e["code"] in ALWAYS_BLOCK and e not in out]
 
 
 def agent_markers(env=None):
@@ -137,16 +160,20 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
         print("\n".join(diff) or "(identical content)")
     if dry_run:
         return 0
+    from . import index, check, report
+    index.build(cfg)
+    before = check.run(cfg, expire=False)    # the repo as it stands: what it already carries is not this change's (D81)
     if action == "retire":
         dest.parent.mkdir(exist_ok=True)
         shutil.move(str(target), str(dest))
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(p["content"].encode("utf-8"))
-    from . import index, check, report
     index.build(cfg)
     r = check.run(cfg, expire=False)
-    if r["errors"]:
+    new = new_errors(before["errors"], r["errors"])
+    old = len(r["errors"]) - len(new)        # by count, not by equality: two identical findings may split old / new
+    if new:
         if action == "retire":
             shutil.move(str(dest), str(target))
         elif current is None:
@@ -154,8 +181,13 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
         else:
             target.write_bytes(current)
         index.build(cfg)
-        print("apply: check found ERRORs, rolled back:\n" + report.format_findings({"errors": r["errors"], "warnings": []}))
+        print("apply: check found ERRORs this change introduces, rolled back:\n"
+              + report.format_findings({"errors": new, "warnings": []})
+              + ("\n(%d more ERROR(s) were in the repo before this change — not this proposal's; `plug check` lists them)" % old if old else ""))
         return 1
+    if old:
+        print("apply: %d ERROR(s) were in the repo before this change and are not caused by it — not blocking; "
+              "`plug check` lists them" % old)
     applied = cfg["proposals_dir"] / "applied" / ppath.name
     applied.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(ppath), str(applied))

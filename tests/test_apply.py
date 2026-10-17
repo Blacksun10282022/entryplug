@@ -51,6 +51,32 @@ def test_add_and_rollback_on_check_error(git_repo):
     assert plug(root, "apply", str(wrong.relative_to(root))).returncode == 1
 
 
+def test_errors_already_in_the_repo_do_not_block_but_new_ones_do(git_repo):
+    """The gate is «adds no new ERROR», not «the repo is clean» (D81). A record naming a rule that does not exist
+    is an ERROR the proposal never touched: the approval lands and says how many were already there. A proposal
+    that breaks a link is still rolled back, and the report names only what that change introduced."""
+    root = git_repo["root"]
+    rec = root / "self/records/2026-08-27-choose-venue.md"
+    rec.write_text(rec.read_text(encoding="utf-8").replace("J1 · 先算", "J9 · 先算"), encoding="utf-8")
+    r = plug(root, "apply", PENDING)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "1 ERROR(s) were in the repo before this change" in r.stdout
+    assert "势头" in (root / "tools/sunzi/dict/shi.md").read_text(encoding="utf-8")
+    assert "self/records/2026-08-27-choose-venue.md" not in git(root, "show", "--name-only", "--format=", "HEAD").stdout
+    bad = proposal(root, "2026-08-29-bad.md", "tools/sunzi/dict/bad.md", "new", entry("坏词", "bad1, bad2", "[[不存在]]"))
+    r = plug(root, "apply", str(bad.relative_to(root)))
+    assert r.returncode == 1 and "rolled back" in r.stdout and not (root / "tools/sunzi/dict/bad.md").exists() and bad.exists()
+    assert "J9" not in r.stdout and "1 more ERROR(s) were in the repo before this change" in r.stdout
+
+
+def test_new_errors_is_a_multiset_and_shape_version_always_blocks():
+    e = lambda code, f="a.md", msg="m": {"level": "ERROR", "code": code, "file": f, "msg": msg, "at": "t"}
+    assert apply.new_errors([e("rid")], [e("rid"), e("rid")]) == [e("rid")]          # the same finding once more is new
+    assert apply.new_errors([e("rid"), e("link")], [e("rid")]) == []                  # fixing one is never a failure
+    assert apply.new_errors([], [dict(e("rid"), at="later")])[0]["code"] == "rid"     # the timestamp is not the key
+    assert [x["code"] for x in apply.new_errors([e("shape_version")], [e("shape_version")])] == ["shape_version"]
+
+
 def test_target_that_contains_a_fence_survives_a_longer_outer_fence(git_repo):
     """A target file carrying its own ``` block: the outer run has to be longer, and the inner one must stay put.
     New in this build — before it, `(.*?)\\n```` stopped at the first inner fence and silently truncated the file

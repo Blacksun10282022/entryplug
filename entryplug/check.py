@@ -163,11 +163,19 @@ def run(cfg, expire=True, tool_checks=True, today=None):
                     if rv < today.strftime("%Y-%m"):
                         warn("rules_review", "self/RULES.md", "%s was due for review in %s" % (l["id"], rv))
     for r in records:
-        for rid in shapes.rule_refs(r["sections"].get("依据", ""), ids):
-            if rid not in ids:
+        unsure = []
+        for rid, cited in shapes.rule_citations(r["sections"].get("依据", ""), ids):
+            if rid in ids:
+                if rid in rules["retired_ids"]:
+                    warn("rid_retired", r["rel"], "%s is named in 依据 but is retired in RULES.md" % rid)
+            elif cited:
                 err("rid", r["rel"], "%s is named in 依据 but does not exist in RULES.md" % rid)
-            elif rid in rules["retired_ids"]:
-                warn("rid_retired", r["rel"], "%s is named in 依据 but is retired in RULES.md" % rid)
+            elif rid not in unsure:
+                unsure.append(rid)
+        if unsure:                          # one line per record, not one per token: these are names until shown otherwise (D82)
+            warn("rid_unsure", r["rel"], "%s look like rule ids but are not in RULES.md and are not written as a rule "
+                 "citation (a line naming RULES, a 规则 heading, or `X9 · …`) — fine if it is a name (a plate, a source "
+                 "label); a meant rule needs its real id" % "、".join(unsure))
         if not r["fm"].get("outcome") and r["age"] >= 30:
             warn("outcome", r["rel"], "record has had no outcome for %d days" % r["age"])
     seen_p = {}

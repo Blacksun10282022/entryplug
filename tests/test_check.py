@@ -71,6 +71,23 @@ def test_error_record_rule_id_missing(repo):
     assert "rid" in codes(r) and any("J9" in f["msg"] for f in r["errors"])
 
 
+def test_rule_id_shaped_names_warn_once_and_citations_still_error(repo):
+    """D82: tokens that only look like rule ids — an MV plate, AWS S3-style service names, a P10–P90 range — are
+    not citations. They are not ERRORs; one rid_unsure WARNING per record lists them. The same unknown id written
+    as a citation (a line naming RULES, a 规则 heading, the `X9 · …` rule-line form) is still an ERROR."""
+    rel = "self/records/2026-08-27-choose-venue.md"
+    edit(repo["root"], rel, "## 最强反证", "底图 `P7-street-run-v3.png`、J8 桶、P10–P90 分位、再一个 P7。\n## 最强反证")
+    r = run(repo)
+    assert "rid" not in codes(r), r["errors"]
+    unsure = [w for w in r["warnings"] if w["code"] == "rid_unsure"]
+    assert len(unsure) == 1 and unsure[0]["file"] == rel
+    assert all(x in unsure[0]["msg"] for x in ("P7", "J8", "P10", "P90")) and unsure[0]["msg"].count("P7") == 1
+    edit(repo["root"], rel, "J8 桶", "按 RULES 的 J8 桶")
+    assert any(f["code"] == "rid" and "J8" in f["msg"] for f in run(repo)["errors"])
+    edit(repo["root"], rel, "按 RULES 的 J8 桶", "J8 桶\n### 规则\n- J9 先算")
+    assert any(f["code"] == "rid" and "J9" in f["msg"] for f in run(repo)["errors"])
+
+
 def test_retired_rule_reference_is_a_warning(repo):
     rel = "self/records/2026-08-27-choose-venue.md"
     edit(repo["root"], rel, "J1 · 先算", "J0 · 先算")

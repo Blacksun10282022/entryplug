@@ -46,7 +46,7 @@ flowchart TD
 | `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索，轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活。走 MCP 时它从不重建，所以读就真的只是读；命令行仍会在作答前把过期索引重建一遍（D76），`--no-index` 关掉这个动作。两种情况下，索引过期都会在结果下面多出一行 `stale; run plug index`（2026-09-07 审计 X-04）|
 | `plug status` | 开机自检。每一层一行（索引、素体、deny + pre-commit、暴走封锁、出击封锁、装备舱、`.plug-off`），然后是一个同步率和一句判定。只有索引层自身不可用时才以非零退出 |
 | `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；一页报告加上同步率。从不给总分。`--contact claude-code\|codex` 跑四步的首次接触冒烟测试 |
-| `plug apply` | 批准一条改装申请：校验 base 短哈希，新增 / 替换 / 退役，以 0 ERROR 通过体检，然后 git 提交（trailer 里带提案 sha）。base 对不上就直接拒绝，从不悄悄覆盖。**仅限主人**：在 agent 环境里运行它会拒绝，并告诉主人怎么自己跑 |
+| `plug apply` | 批准一条改装申请：校验 base 短哈希，新增 / 替换 / 退役，体检不新增 ERROR（库里原有的只计数、不拦），然后 git 提交（trailer 里带提案 sha）。base 对不上就直接拒绝，从不悄悄覆盖。**仅限主人**：在 agent 环境里运行它会拒绝，并告诉主人怎么自己跑 |
 | `plug eval` | 黄金集 recall@10；中文查询召回为零是一个 ERROR |
 | `plug init --pilot claude-code\|codex\|both` | 把闸门和驾驶员外壳装进一个内容仓：pre-commit 钩子、`.claude/settings.json` 的 deny 规则和钩子（合并，从不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md 地图（仅在缺失时）、说明书镜像、`.codex/hooks.json` 和 `.codex/config.toml`、`work/` 和 `workshop/` 区，全部用真实绝对路径；幂等，并把对每个文件做了什么都打印出来。`--link-skills` 还会把说明书装到用户级 |
 
