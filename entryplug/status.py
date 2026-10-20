@@ -10,10 +10,11 @@
 #       to run it first thing · tests.
 # Note: the sync rate is simply passed/total over the counted checks; .plug-off is informational and is not
 #       counted. A failing line prints [NG] and the verdict becomes PATTERN ORANGE with the layer and a fix hint.
-# Deps: stdlib json · sqlite3 (via search) · config · shapes.
+#       An index behind the content is [NG] too, with how far behind (D83), but still searchable, so exit stays 0.
+# Deps: stdlib json · sqlite3 (via search) · config · shapes · index.
 import json, os, time
 from pathlib import Path
-from . import config, shapes, search, trust
+from . import config, shapes, search, trust, index
 
 # The panel is for the owner's eyes; the pilot gets one line. In the 2026-09-03 blind test both pilots copied the
 # whole panel, hook and trust status included, into answers meant for the owner (D73); since D74 the panel travels
@@ -153,6 +154,10 @@ def panel(cfg):
     """Returns (text, exit_code). Exit is nonzero only when the index layer itself is unusable."""
     res = {k: fn(cfg) for k, fn in (("index", check_index), ("base", check_base), ("at-field", check_atfield),
                                     ("berserk", check_berserk), ("sortie", check_sortie), ("equipment", check_equipment))}
+    # D83: a stale index used to pass as [OK] while the read-only MCP search could not see the newest pages.
+    lag = res["index"][0] and index.stale(cfg)
+    if lag:
+        res["index"] = (False, "%s · STALE: %s (MCP search reads it as is)" % (res["index"][1], lag))
     off = config.plug_off(cfg)
     L = ["ENTRY PLUG — INSERTION SEQUENCE",
          "%s %s%s" % (mark(res["index"][0]), dots("LCL pressure"), res["index"][1]),
@@ -170,7 +175,7 @@ def panel(cfg):
                  (rate, " · ".join(LAYERS[k] for k in bad), HINTS[bad[0]]))
     else:
         L.append("SYNC RATE %.1f%% — ALL SYSTEMS NOMINAL. %s, LIFT OFF." % (rate, cfg["root"].name.upper()))
-    return "\n".join(L), (0 if res["index"][0] else 1)
+    return "\n".join(L), (0 if res["index"][0] or lag else 1)
 
 
 def brief(text):

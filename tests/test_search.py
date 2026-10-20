@@ -113,11 +113,13 @@ def test_mcp_and_cli_no_index_warn_without_rebuilding(repo):
     result = json.loads(out.getvalue())["result"]           # warning stays inside the single JSON-RPC response
     text = result["content"][0]["text"]
     assert not result["isError"] and "showing 0/0" in text and text.count("stale; run plug index") == 1
+    assert text.splitlines()[0].startswith("WARNING index stale; run plug index — 1 file(s) newer than the index built ")  # D83: first, with how far
     r = plug(repo["root"], "search", "newstaleword", "--no-index")
     assert r.returncode == 0 and "showing 0/0" in r.stdout and r.stdout.count("stale; run plug index") == 1
+    assert r.stdout.splitlines()[0].startswith("WARNING index stale")
     r = plug(repo["root"], "search", "newstaleword", "--no-index", "--json")
-    result = json.loads(r.stdout)
-    assert r.returncode == 0 and result["total"] == 0 and result["warning"] == "stale; run plug index"
+    result = json.loads(r.stdout)                            # D83 added how far behind after the fixed prefix
+    assert r.returncode == 0 and result["total"] == 0 and result["warning"].startswith("stale; run plug index — 1 file(s) newer")
     assert repo["index_path"].read_bytes() == before and index.stale(repo)
     r = plug(repo["root"], "search", "newstaleword", "--json")
     assert r.returncode == 0 and json.loads(r.stdout)["total"] > 0 and not index.stale(repo)

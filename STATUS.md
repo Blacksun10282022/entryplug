@@ -107,6 +107,10 @@ Tags are only cut when the acceptance script passes in full. There is no tag yet
 
 Cuts made after the first blind A/B of an equipment manual, all on the machine's side of the pilot's context and time: the boot panel goes to the owner's screen as `systemMessage` and the pilot gets one verdict line (D73, D74); pre-commit refuses and does nothing else (D75); the index rebuilds itself on read (D76); the record reminder fires once per session (D77). `python -m pytest` and `python tests/acceptance.py` rerun after the cuts.
 
+## Changed on 2026-10-20 (D83)
+
+A stale index is now a degraded layer: `plug status` marks the index line [NG] with how far behind it is (exit stays 0, it is still searchable), and the search warning moves to the first line with the same numbers. D76's MCP half is corrected in place: the MCP search has been read-only since the 2026-09-07 audit and never rebuilds. Found when a content repo's index sat two days behind under an all-green panel. `python -m pytest` 139 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL.
+
 ## Known and deliberate (2026-09-04)
 
 The machine repo locks nothing about itself (D79): a pilot working in `entryplug` can edit the gates that a content repo relies on. The owner declined to close this; the machine's protection is that he reads every diff before it is committed. The locks in a content repo are unaffected.

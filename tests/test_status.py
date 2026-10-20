@@ -41,6 +41,23 @@ def test_plug_off_is_reported_and_a_dead_index_exits_nonzero(repo):
     assert "PATTERN ORANGE" in text and "the index layer" in text and "run plug index" in text.splitlines()[-1]
 
 
+def test_a_stale_index_is_ng_with_how_far_but_exits_zero(repo):
+    """D83: a content repo's index sat two days behind — the read-only MCP search could not see the newest records —
+    while this panel said ALL SYSTEMS NOMINAL. Behind is now [NG] with how far; still searchable, so exit stays 0."""
+    from entryplug import index
+    p = repo["root"] / "tools/sunzi/dict/shi.md"
+    p.write_text(p.read_text(encoding="utf-8") + "\n未进索引的改动\n", encoding="utf-8", newline="\n")
+    text, code = status.panel(repo)
+    line = text.splitlines()[1]
+    assert code == 0 and line.startswith("[NG] LCL pressure") and "docs," in line, line
+    assert "STALE: 1 file(s) newer than the index built " in line and "MCP search reads it as is" in line, line
+    assert "the index layer" in text.splitlines()[-1] and "run plug index" in text.splitlines()[-1]
+    assert "[NG] LCL pressure" in status.brief(text)            # the pilot's one boot line carries it too (D74)
+    index.build(repo)
+    text, code = status.panel(repo)
+    assert code == 0 and text.splitlines()[1].startswith("[OK] LCL pressure") and "STALE" not in text
+
+
 def test_kb_approve_in_the_environment_disarms_the_berserk_lock(repo, monkeypatch):
     monkeypatch.setenv("KB_APPROVE", "1")
     text, _ = status.panel(repo)

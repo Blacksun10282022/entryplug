@@ -21,7 +21,8 @@ TOOL = {
                    "scope=corpus searches the corpus. Takes one query or several (different angles are merged "
                    "round-robin, never reranked) and returns compact index lines: id · source · file#Lstart-Lend "
                    "[pos] · kind · excerpt (<=120 chars), with a tail line 'showing k/N'. Fetch paragraphs yourself "
-                   "with Read using the line numbers.",
+                   "with Read using the line numbers. A first line 'WARNING index stale' means the index is behind "
+                   "the content and this search cannot see the newest pages: run plug index, then search again.",
     "inputSchema": {
         "type": "object",
         "properties": {

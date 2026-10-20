@@ -7,7 +7,7 @@
 # Not:  no reranking, no LLM, no vectors; never edits content; an unchanged file is never tokenised again
 #       (the hash is compared first and its chunk count read back from the table); corpus takes only the plain-text section
 #       (the timestamped copy is a duplicate and stays out of the index); work/ and workshop/ are never indexed.
-# Who:  cli (plug index) · search (rebuilds a stale index before answering, D76) · tests.
+# Who:  cli (plug index) · search (rebuilds a stale index before answering, D76) · status (how far behind, D83) · tests.
 # Note: chunking is per paragraph (a cleaned transcript is one paragraph per line, carrying [m:ss]); a paragraph
 #       over 800 chars is cut into 600/100 windows. Line numbers are 1-based so Read/sed can use them.
 #       Row ids: entry = file stem; corpus = doc#seq (single-paragraph doc = doc#window); record / material /
@@ -197,18 +197,23 @@ def build(cfg, full=False):
 
 def stale(cfg):
     """Is the index older than the content? Cheap on purpose (D76): a content file modified after the last build,
-    or a different number of walked files, means stale; no hashing, no tokenising. Absent or unreadable = stale."""
+    or a different number of walked files, means stale; no hashing, no tokenising. Absent or unreadable = stale.
+    Returns "" when fresh, else how far behind it is in words (D83) — callers that read it as a bool still can."""
     if not cfg["index_path"].exists():
-        return True
+        return "no index"
     try:
         con = sqlite3.connect(cfg["index_path"])
         meta = dict(con.execute("select key, value from meta"))
         con.close()
     except sqlite3.Error:
-        return True
+        return "index unreadable"
     built, walked = float(meta.get("built_epoch", 0)), int(meta.get("walked", -1))
     files = [f for f in config.walk(cfg) if f["area"] != "checks"]
-    return len(files) != walked or any(f["path"].stat().st_mtime > built for f in files)
+    newer = sum(f["path"].stat().st_mtime > built for f in files)
+    if not newer and len(files) == walked:
+        return ""
+    moved = "" if len(files) == walked else ", %d → %d files" % (walked, len(files))
+    return "%d file(s) newer than the index built %s%s" % (newer, meta.get("built_at", "?"), moved)
 
 
 def write_index_md(cfg, entries, stats):

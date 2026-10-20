@@ -10,6 +10,7 @@
 # Note: query construction (D22) — split on whitespace/punctuation; CJK runs of <=4 chars become a bigram phrase,
 #       longer runs use jieba words of >=2 chars; a single character becomes a prefix "X"*; latin words lowercased.
 #       dense_candidates is the interface stub for entryplug[dense]: same row shape, empty in this version.
+#       A stale index puts one WARNING line first, saying how far behind it is (D83).
 # Deps: stdlib sqlite3 · jieba (via index.tokens).
 import json, re, sqlite3
 import jieba
@@ -119,12 +120,12 @@ def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, au
             for r in shown]
     res = {"rows": rows, "shown": len(rows), "total": len(cands), "queries": used, "scope": scope, "built_at": meta.get("built_at")}
     if stale:
-        res["warning"] = "stale; run plug index"
+        res["warning"] = "stale; run plug index — %s, so these results can miss them" % stale
     return res
 
 
 def format_rows(res):
-    lines = []
+    lines = ["WARNING index " + res["warning"]] if res.get("warning") else []   # first line, before any hit (D83)
     for r in res["rows"]:
         loc = "%s#L%s-L%s" % (r["file"], r["lstart"], r["lend"]) + (" [%s]" % r["pos"] if r["pos"] else "")
         lines.append("%s · %s · %s · %s · %s%s" % (r["id"], r["source"], loc, r["kind"], r["excerpt"],
@@ -135,6 +136,4 @@ def format_rows(res):
                 "corpus": " (corpus only; use scope=tools for dict · playbooks · records)"}.get(res.get("scope"), "")
         tail += " · no hit in scope %s%s · index built %s" % (res.get("scope"), hint, res.get("built_at") or "never (run plug index)")
     lines.append(tail)
-    if res.get("warning"):
-        lines.append(res["warning"])
     return "\n".join(lines)
