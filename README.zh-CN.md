@@ -63,7 +63,48 @@ python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FA
 
 `plug search` 默认覆盖字典、打法和记录；语料要加 `--scope corpus`（MCP 上是 `scope=corpus`）。没有命中时，末行会说搜的是哪个范围、索引是什么时候建的；没有索引时它会明说，并以 1 退出。
 
-照 `example-tool/` 的样子搭你自己的内容仓（`plug.yaml` 是唯一允许出现路径的地方），然后在仓里跑 `plug init --pilot both` 装上闸门和驾驶员外壳，再跑 `plug index`、`plug status`，以及 `plug check --contact claude-code`（或 `codex`），四步全绿。集成细节在 `pilots/claude-code/` 和 `pilots/codex/`，闸门在 `gates/README.md`，形状在 `docs/SHAPES.md`，一路上做过的每个决定在 `docs/DECISIONS.md`。
+上面跑的是示例上的机器。要让它从你自己的判断出发工作，就造你自己的素体（下一节）。集成细节在 `pilots/claude-code/` 和 `pilots/codex/`，闸门在 `gates/README.md`，形状在 `docs/SHAPES.md`，一路上做过的每个决定在 `docs/DECISIONS.md`。
+
+## 造你自己的素体
+
+entryplug 是机器：克隆一次就好，你自己的东西不要放进去。你的素体是另一个属于你自己的 git 仓，结构照 `example-tool/`。**在那个仓里工作**：Claude Code 或 Codex 要在那里打开，不要在 `entryplug/` 里打开，因为 deny 规则只约束项目根就是内容仓的会话。
+
+```
+mkdir my-unit && cd my-unit && git init
+cp <entryplug>/example-tool/plug.yaml .     # 然后把 tools: 改成 []、设好 language:，outbound: 那段保留
+mkdir -p self/facts self/records proposals/pending
+# 写好 self/RULES.md、self/style.md 和 self/facts/ 里的一个文件（见下），然后：
+git add -A && git commit -m "Base: first rules"
+plug init --pilot claude-code               # 或 codex、both：装上两道封锁
+git add -A && git commit -m "plug init"
+plug index && plug status                   # 面板最后一行应是 SYNC RATE 100.0%
+plug check --contact claude-code            # 四步全 OK
+claude                                      # 或 codex，永远从这个文件夹里启动
+```
+
+顺序要紧。`plug.yaml` 定好、第一批规则写好，都要在 `plug init` **之前**。装上之后，`self/RULES.md`、`self/facts/`、`plug.yaml` 和登记在里面的每件装备就锁上了：驾驶员改不了，碰到它们的提交会被拒。从那以后，改动就是驾驶员写进 `proposals/pending/` 的改装申请，由你用 `plug apply` 批准（见[主人的两行命令](#主人的两行命令)）。复制来的 `outbound:` 那段要留着：没有它，出击封锁就没有东西可拦。
+
+### 里面放什么
+
+- **`self/RULES.md`**：五到十个你反复要做的决定。分两层比较好用，跟示例一样：底线（撞上就停，驾驶员指出冲突，不能不同意）和判断规则（驾驶员可以不同意，但要说出是哪条、为什么，最后你定）。一行一条：`- J1 · 陈述 [YYYY-MM · 来源]`。文件开头是 `model: … reviewed: YYYY-MM-DD`，结尾是一个 `## 已退役` 段，规则退役时挪到这里，不删。机器按原样读三个标记：`复核 YYYY-MM`（到期复核）、段标题里的 `到期 YYYY-MM-DD`（整段作废）、段标题里的 `退役`（已退役）。完整格式在 `docs/SHAPES.md`。
+- **`self/facts/`**：关于你处境的、能核实的事（日期、数字、约束），每条带来源。不放看法。
+- **`self/style.md`**：回答该是什么样：语言、长短、哪些不要。
+- **`self/records/`**：先空着。飞行记录由驾驶员在你干活时写，新规则从这里长出来。
+- **`tools/`**：第一天不要造装备。同一类问题反复出现了，再照 `example-tool/tools/sunzi/` 的样子在 `workshop/` 里造一件，然后用改装申请登记。
+
+### 让驾驶员帮你搭
+
+多数人会让驾驶员来动手。在新建的空文件夹里做，在 `plug init` 之前做，规则要是你自己的：
+
+```
+在这个文件夹里搭一个 entryplug 内容仓，以 <entryplug>/docs/SHAPES.md 和 <entryplug>/example-tool/
+为参照。从示例复制 plug.yaml，把 tools 设成 []、language 设成中文，outbound 那段保留。建
+self/RULES.md，只要文件头和两层、不要规则，再建 self/style.md、self/facts/、self/records/。然后一次
+问我一个问题，问我反复要做的决定，把我的回答用我的原话写成规则。不要自己编规则。提交前先给我看
+RULES.md。不要跑 plug init。
+```
+
+模型自己写出来的素体装的是模型的判断，不是你的；封锁只保护你放进去的东西。
 
 ### 机器变了之后，更新一个已装好的仓
 

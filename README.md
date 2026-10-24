@@ -78,7 +78,49 @@ python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FA
 
 `plug search` covers the dictionary, the playbooks and the records by default; the corpus needs `--scope corpus` (`scope=corpus` over MCP). With no hits the tail line says which scope was searched and when the index was built; with no index it says so and exits 1.
 
-Build your own content repo the way `example-tool/` is built (`plug.yaml` is the only place a path may appear), then run `plug init --pilot both` inside it to install the gates and the pilot shells, then `plug index`, `plug status`, and `plug check --contact claude-code` (or `codex`) with all four steps green. Integration details are in `pilots/claude-code/` and `pilots/codex/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`, and every call made along the way in `docs/DECISIONS.md`.
+That is the machine running on the example. To run it on your own judgment, build your own Base (next section). Integration details are in `pilots/claude-code/` and `pilots/codex/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`, and every call made along the way in `docs/DECISIONS.md`.
+
+## Your own Base
+
+entryplug is the machine: clone it once and keep your own material out of it. Your Base is a separate git repository of your own, shaped like `example-tool/`. Work **from inside that repository**: open Claude Code or Codex there, not in `entryplug/`, because the deny rules only bind a session whose project root is the content repo.
+
+```
+mkdir my-unit && cd my-unit && git init
+cp <entryplug>/example-tool/plug.yaml .     # then set tools: [] and your language:, keep the outbound: block
+mkdir -p self/facts self/records proposals/pending
+# write self/RULES.md, self/style.md and one file in self/facts/ (see below), then:
+git add -A && git commit -m "Base: first rules"
+plug init --pilot claude-code               # or codex, or both: installs the two locks
+git add -A && git commit -m "plug init"
+plug index && plug status                   # the panel should end with SYNC RATE 100.0%
+plug check --contact claude-code            # four steps, all OK
+claude                                      # or codex, always started from this folder
+```
+
+Order matters. Settle `plug.yaml` and write the first rules **before** `plug init`. After it, `self/RULES.md`, `self/facts/`, `plug.yaml` and every piece of equipment registered in it are locked: the pilot cannot edit them, and a commit that touches them is refused. From then on a change is a refit request the pilot writes into `proposals/pending/`, and you approve it with `plug apply` (see [The owner's two lines](#the-owners-two-lines)). Keep the `outbound:` block you copied: without it the sortie lock has nothing to match.
+
+### What goes in it
+
+- **`self/RULES.md`**: five to ten decisions you keep making again. Two tiers work well, as in the example: hard lines (the pilot stops and names the conflict; it cannot overrule them) and judgment rules (it may disagree, naming the rule and why, and you decide). One rule per line, `- J1 · statement [YYYY-MM · source]`. The file opens with `model: … reviewed: YYYY-MM-DD` and ends with a `## 已退役` section, where a rule goes when it retires instead of being deleted. The machine reads three markers as written, in an English Base too: `复核 YYYY-MM` (review by), `到期 YYYY-MM-DD` in a section title (the section expires), and `退役` in a section title (retired). The full format is in `docs/SHAPES.md`.
+- **`self/facts/`**: what is true and checkable about your situation (dates, numbers, constraints), each with its source. Not opinions.
+- **`self/style.md`**: how answers should read: language, length, what to leave out.
+- **`self/records/`**: leave it empty. The pilot writes the flight log as you work, and new rules come out of it.
+- **`tools/`**: no equipment on day one. When the same kind of question keeps coming back, build one in `workshop/` on the pattern of `example-tool/tools/sunzi/`, then register it with a refit request.
+
+### Building it with your pilot
+
+Most people will let the pilot do the typing. Do it in the new, empty folder, before `plug init`, and keep the rules yours:
+
+```
+Set up an entryplug content repo in this folder, using <entryplug>/docs/SHAPES.md and
+<entryplug>/example-tool/ as the reference. Copy plug.yaml from the example, set tools: [] and
+language: English, keep the outbound: block. Create self/RULES.md with the header and two tiers but
+no rules, plus self/style.md, self/facts/ and self/records/. Then interview me, one question at a
+time, about decisions I keep making again, and write my answers as rules in my words. Do not invent
+rules. Show me RULES.md before you commit. Do not run plug init.
+```
+
+A Base the model wrote on its own holds the model's judgment, not yours; the locks only protect what you put in.
 
 ### Updating an install after the machine changes
 
