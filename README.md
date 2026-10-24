@@ -21,31 +21,10 @@ entryplug is the plug that lets a coding agent work from one person's written ju
 
 *Entryplug is the plug any pilot (Claude Code or Codex) inserts into one person's **Base** (rules, flight log, facts) to fight with that person's **Equipment** (tools). The owner never pilots; the pilot never edits the Base. The pattern is called **Base and Equipment**.*
 
-```mermaid
-flowchart TD
-    Owner["Owner: holds the rules,<br/>the only one who approves"]
-    Pilot["Pilot: Claude Code or Codex,<br/>carries the equipment"]
-    Search["the machine: index + search,<br/>read-only, proposes nothing itself"]
-    Base["Base:<br/>rules · flight log · facts"]
-    Equip["Equipment:<br/>manuals + dictionaries"]
-    Rec["records + refit requests"]
-    Berserk{{"berserk lock:<br/>deny + pre-commit"}}
-    Sortie{{"sortie lock:<br/>a hook"}}
-    Out["anything outward"]
-
-    Pilot -->|query| Search
-    Search -->|reads| Base
-    Search -->|reads| Equip
-    Pilot -->|writes| Rec
-    Rec -->|proposes| Owner
-    Owner -->|approves + writes| Base
-    Owner -->|approves + writes| Equip
-    Pilot -. blocked by .-> Berserk
-    Berserk -. protects .-> Base
-    Berserk -. protects .-> Equip
-    Pilot -. blocked by .-> Sortie
-    Sortie -. guards .-> Out
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-en-dark.svg">
+  <img src="docs/architecture-en-light.svg" width="100%" alt="Architecture: the pilot (Claude Code or Codex) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny + pre-commit). Records and refit requests go to the owner, the only one who approves and writes. Anything outward is stopped by the sortie lock, a hook.">
+</picture>
 
 Three things are measured, three separate ways, and never mixed into one number:
 

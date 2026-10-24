@@ -6,31 +6,10 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 
 *entryplug 是任何驾驶员（Claude Code 或 Codex）插入某个人的**素体**（规则、飞行记录、事实）、用那个人的**装备**（工具）作战时所插的那根插栓。主人从不驾驶；驾驶员从不改素体。这个模式叫**素体与装备**。*
 
-```mermaid
-flowchart TD
-    Owner["主人：持有规则，<br/>唯一的批准者"]
-    Pilot["驾驶员：Claude Code 或 Codex，<br/>携带装备"]
-    Search["机器：索引 + 搜索，<br/>只读，自己不提任何建议"]
-    Base["素体：<br/>规则 · 飞行记录 · 事实"]
-    Equip["装备：<br/>说明书 + 字典"]
-    Rec["记录 + 改装申请"]
-    Berserk{{"暴走封锁：<br/>deny + pre-commit"}}
-    Sortie{{"出击封锁：<br/>一个钩子"}}
-    Out["任何对外的动作"]
-
-    Pilot -->|查询| Search
-    Search -->|读取| Base
-    Search -->|读取| Equip
-    Pilot -->|写入| Rec
-    Rec -->|提交申请| Owner
-    Owner -->|批准并写入| Base
-    Owner -->|批准并写入| Equip
-    Pilot -. 被拦下 .-> Berserk
-    Berserk -. 保护 .-> Base
-    Berserk -. 保护 .-> Equip
-    Pilot -. 被拦下 .-> Sortie
-    Sortie -. 把守 .-> Out
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-zh-dark.svg">
+  <img src="docs/architecture-zh-light.svg" width="100%" alt="架构：驾驶员（Claude Code 或 Codex）向机器查询；机器是只读的索引与搜索，读取素体（规则、飞行记录、事实）和装备（说明书与字典）。直接改规则会被暴走封锁（deny + pre-commit）拦下。记录和改装申请交给主人，只有主人批准并写入。任何对外的动作都会被出击封锁（一个钩子）拦下。">
+</picture>
 
 有三样东西被衡量，用三种不同的方法，从不并成一个数：
 
