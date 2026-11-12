@@ -21,10 +21,10 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 
 | 命令 | 作用 |
 |---|---|
-| `plug index` | 遍历内容仓，校验形状，切块，再分词（jieba 词加中日韩二元组）写进**一张 FTS5 表**；按文件哈希增量；生成人类可读的 `index.md` 和每件装备的 `playbooks/INDEX.md`，并把说明书镜像到各驾驶员的 skills 目录 |
-| `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索，轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活。走 MCP 时它从不重建，所以读就真的只是读；命令行仍会在作答前把过期索引重建一遍（D76），`--no-index` 关掉这个动作。两种情况下，索引过期都会在结果最前面多出一行 `WARNING index stale; run plug index — N file(s) newer than the index built …`，写明落后多少（2026-09-07 审计 X-04；D83），`plug status` 的索引那一层也报 [NG] |
-| `plug status` | 开机自检。每一层一行（索引、素体、deny + pre-commit、暴走封锁、出击封锁、装备舱、`.plug-off`），然后是一个同步率和一句判定。只有索引层自身不可用时才以非零退出 |
-| `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；一页报告加上同步率。从不给总分。`--contact claude-code\|codex` 跑四步的首次接触冒烟测试 |
+| `plug index` | 遍历内容仓，校验形状，切块，再分词（jieba 词加中日韩二元组）写进**一张 FTS5 表**；按文件哈希增量；待批的改装申请只按它的理由入索引，目标被排除的整份不入（D84）；生成人类可读的 `index.md` 和每件装备的 `playbooks/INDEX.md`，并把说明书镜像到各驾驶员的 skills 目录 |
+| `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索（长的中文句子保留短词：每个单字词前后的二元组也一并去搜，D85），轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活。走 MCP 时它从不重建，所以读就真的只是读；命令行仍会在作答前把过期索引重建一遍（D76），`--no-index` 关掉这个动作。两种情况下，索引过期都会在结果最前面多出一行 `WARNING index stale; run plug index — N file(s) newer than the index built …`，写明落后多少（2026-09-07 审计 X-04；D83），`plug status` 的索引那一层也报 [NG] |
+| `plug status` | 开机自检。每一层一行（索引、素体、deny + pre-commit、暴走封锁、出击封锁、装备舱、`.plug-off`），有记录过了自己写的 `due` 日还没填结果时再多一行（只是提示，不变橙；D86），然后是一个同步率和一句判定。只有索引层自身不可用时才以非零退出 |
+| `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；记录过了自己写的结算日（`due: YYYY-MM-DD`）还没填结果，报一条 `due` WARNING（没到那天不报，也不再报 30 天的 `outcome` WARNING；D86）；一页报告加上同步率。从不给总分。`--contact claude-code\|codex` 跑四步的首次接触冒烟测试 |
 | `plug apply` | 批准一条改装申请：校验 base 短哈希，新增 / 替换 / 退役，体检不新增 ERROR（库里原有的只计数、不拦），然后 git 提交（trailer 里带提案 sha）。base 对不上就直接拒绝，从不悄悄覆盖。**仅限主人**：在 agent 环境里运行它会拒绝，并告诉主人怎么自己跑 |
 | `plug eval` | 黄金集 recall@10；中文查询召回为零是一个 ERROR |
 | `plug init --pilot claude-code\|codex\|both` | 把闸门和驾驶员外壳装进一个内容仓：pre-commit 钩子、`.claude/settings.json` 的 deny 规则和钩子（合并，从不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md 地图（仅在缺失时）、说明书镜像、`.codex/hooks.json` 和 `.codex/config.toml`、`work/` 和 `workshop/` 区，全部用真实绝对路径；幂等，并把对每个文件做了什么都打印出来。`--link-skills` 还会把说明书装到用户级 |
@@ -128,6 +128,8 @@ RULES.md。不要跑 plug init。
 
 `--emit` 把面板显示在主人的屏幕上（`systemMessage`），只把一行判定作为 `additionalContext` 递给驾驶员（D74）。`AGENTS.md` 则叫 Codex 式的驾驶员一上来先跑 `plug status`。
 
+记录可以带 `due: YYYY-MM-DD`，写明这条判断哪天结算。从那天起，面板多出一行 `[--] Records due`，报最早到期的那条和另有几条；这一行也随判定一起递给驾驶员，直到 `outcome` 填上。它是主人的待办，不是哪一层坏了：不计入同步率，也从不让判定变橙（D86）。
+
 ## 插上插栓和不插的区别
 
 下面是一对：同一个处境，在孙子示例装备上、用同一个模型（gpt-6-astra）答了两遍，一遍带装备，一遍是裸模型。没有附任何分数。自己读这两份，看差别。
@@ -203,9 +205,9 @@ RULES.md。不要跑 plug init。
 
 | 指标 | 结果 | 复现 | 截至 |
 |---|---|---|---|
-| 两道封锁（验收） | 24 项自动 PASS，0 FAIL，4 项人工 | `python tests/acceptance.py` | 2026-09-05 |
-| 命令与闸门（单元测试） | 134 通过 | `python -m pytest` | 2026-09-07 |
-| 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-09-05 |
+| 两道封锁（验收） | 24 项自动 PASS，0 FAIL，4 项人工 | `python tests/acceptance.py` | 2026-11-12 |
+| 命令与闸门（单元测试） | 153 通过 | `python -m pytest` | 2026-11-12 |
+| 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-12 |
 
 有一个测试（`tests/test_eval_goldset.py`）把召回压在 0.93 的下限，并断言中文召回永不为零。
 

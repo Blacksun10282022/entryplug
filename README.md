@@ -36,10 +36,10 @@ Three things are measured, three separate ways, and never mixed into one number:
 
 | verb | what it does |
 |---|---|
-| `plug index` | walks the content repo, validates shapes, chunks, then tokenises (jieba words plus CJK bigrams) into **one FTS5 table**; incremental by file hash; writes the human-readable `index.md` and each equipment's `playbooks/INDEX.md`, and mirrors the manuals into the pilots' skills directories |
-| `plug search` / MCP `search` | the only query interface, read-only: one or more queries, alias expansion, full text, round-robin merge, grouped by document, compact lines (id · source · file#Lstart-Lend · kind · excerpt). **No reranking**: reading the window and weighing it is the pilot's job. Over MCP it never rebuilds, so a read really is a read; the CLI still rebuilds a stale index before answering (D76) and `--no-index` turns that off. Either way a stale index puts one `WARNING index stale; run plug index — N file(s) newer than the index built …` line ahead of the results (audit 2026-09-07, X-04; D83), and `plug status` shows the index layer [NG] |
-| `plug status` | the boot self-check. One line per layer (index, Base, deny + pre-commit, berserk lock, sortie lock, equipment bay, `.plug-off`), then a sync rate and a verdict. Exits nonzero only when the index layer itself is unusable |
-| `plug check` | the check-up: ERROR / WARNING one line at a time with the time each was verified, the header self-check (shape version · index freshness · when each hook last fired · mounted equipment), each equipment's own `checks/`, refit requests unapproved for 30 days moved to rejected/, one page of report plus the sync rate. Never a total score. `--contact claude-code\|codex` runs the four-step first-contact smoke test |
+| `plug index` | walks the content repo, validates shapes, chunks, then tokenises (jieba words plus CJK bigrams) into **one FTS5 table**; incremental by file hash; a pending refit request is indexed from its reasons only, and not at all when its target is excluded (D84); writes the human-readable `index.md` and each equipment's `playbooks/INDEX.md`, and mirrors the manuals into the pilots' skills directories |
+| `plug search` / MCP `search` | the only query interface, read-only: one or more queries, alias expansion, full text (a long Chinese sentence keeps its short terms: the bigrams around every one-character word are searched too, D85), round-robin merge, grouped by document, compact lines (id · source · file#Lstart-Lend · kind · excerpt). **No reranking**: reading the window and weighing it is the pilot's job. Over MCP it never rebuilds, so a read really is a read; the CLI still rebuilds a stale index before answering (D76) and `--no-index` turns that off. Either way a stale index puts one `WARNING index stale; run plug index — N file(s) newer than the index built …` line ahead of the results (audit 2026-09-07, X-04; D83), and `plug status` shows the index layer [NG] |
+| `plug status` | the boot self-check. One line per layer (index, Base, deny + pre-commit, berserk lock, sortie lock, equipment bay, `.plug-off`), one more when records are past their `due` day with no outcome (informational, never orange; D86), then a sync rate and a verdict. Exits nonzero only when the index layer itself is unusable |
+| `plug check` | the check-up: ERROR / WARNING one line at a time with the time each was verified, the header self-check (shape version · index freshness · when each hook last fired · mounted equipment), each equipment's own `checks/`, refit requests unapproved for 30 days moved to rejected/, a `due` WARNING for a record past the day it set for itself (`due: YYYY-MM-DD`; before that day there is none, and it replaces the 30-day `outcome` WARNING; D86), one page of report plus the sync rate. Never a total score. `--contact claude-code\|codex` runs the four-step first-contact smoke test |
 | `plug apply` | approves one refit request: verifies the base short hash, adds / replaces / retires, checks that the change adds no new ERROR (ones already in the repo are counted, not blocking), then git commits (the proposal sha in a trailer). A base mismatch is refused outright, never silently overwritten. **Owner only**: run inside an agent environment, it refuses and tells the owner how to run it himself |
 | `plug eval` | gold-set recall@10; zero recall on Chinese queries is an ERROR |
 | `plug init --pilot claude-code\|codex\|both` | installs the gates and the pilot shells into a content repo: the pre-commit hook, `.claude/settings.json`'s deny rules and hooks (merged, never overwritten), `.mcp.json`, the CLAUDE.md / AGENTS.md map (only when absent), the manual mirror, `.codex/hooks.json` and `.codex/config.toml`, the `work/` and `workshop/` zones, all with real absolute paths; idempotent, and it prints what it did to every file. `--link-skills` also installs the manuals user-level |
@@ -144,6 +144,8 @@ The panel above is the Sunzi example equipment as it ships, before `plug init`. 
 
 `--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as `additionalContext` (D74). `AGENTS.md` tells Codex-style pilots to run `plug status` first thing instead.
 
+A record may carry `due: YYYY-MM-DD`, the day its judgment is to be settled. From that day the panel adds one `[--] Records due` line naming the oldest such record and how many more there are, and that line rides along with the pilot's verdict line until `outcome` is filled. It is a to-do for the owner, not a broken layer: it is not counted in the sync rate and never turns the verdict orange (D86).
+
 ## With the plug and without it
 
 Below is one pair: the same situation answered twice on the Sunzi example equipment by the same model (gpt-6-astra), once with the equipment and once as the bare model. There is no score attached. Read the two and see the difference yourself.
@@ -219,9 +221,9 @@ Three things, three ways, never one number.
 
 | measure | result | reproduce | as of |
 |---|---|---|---|
-| the two locks (acceptance) | 24 automated PASS, 0 FAIL, 4 manual | `python tests/acceptance.py` | 2026-09-05 |
-| verbs and gates (unit tests) | 134 passed | `python -m pytest` | 2026-09-07 |
-| gold-set recall@10 | 0.98 (Chinese 0.96, English 1.00), n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-09-05 |
+| the two locks (acceptance) | 24 automated PASS, 0 FAIL, 4 manual | `python tests/acceptance.py` | 2026-11-12 |
+| verbs and gates (unit tests) | 153 passed | `python -m pytest` | 2026-11-12 |
+| gold-set recall@10 | 0.98 (Chinese 0.96, English 1.00), n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-12 |
 
 A test (`tests/test_eval_goldset.py`) holds the recall at a floor of 0.93 and asserts that Chinese recall is never zero.
 
