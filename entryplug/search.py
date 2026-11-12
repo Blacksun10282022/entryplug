@@ -7,8 +7,9 @@
 # Not:  no reranking, no scoring, no window reading (that is the pilot's job, §8.1); auto_index=False never
 #       rebuilds the index or its generated files; retrieval uses a read-only connection and never calls an LLM.
 # Who:  cli (plug search) · mcp (tools/call search) · eval (recall@10) · contact (first contact, step 2).
-# Note: query construction (D22) — split on whitespace/punctuation; CJK runs of <=4 chars become a bigram phrase,
-#       longer runs use jieba words of >=2 chars; a single character becomes a prefix "X"*; latin words lowercased.
+# Note: query construction (D22, D85) — split on whitespace/punctuation; CJK runs of <=4 chars become a bigram
+#       phrase; longer runs use jieba words of >=2 chars plus every bigram that touches a one-character jieba word
+#       (the index holds every bigram); a single character becomes a prefix "X"*; latin words lowercased; all OR-ed.
 #       dense_candidates is the interface stub for entryplug[dense]: same row shape, empty in this version.
 #       A stale index puts one WARNING line first, saying how far behind it is (D83).
 # Deps: stdlib sqlite3 · jieba (via index.tokens).
@@ -33,7 +34,11 @@ def term_parts(term):
         elif len(run) <= 4:
             out.append(phrase(run))
         else:
-            out += [phrase(w) for w in jieba.lcut(run) if len(w) >= 2] or [phrase(run)]
+            ws = jieba.lcut(run)
+            out += [phrase(w) for w in ws if len(w) >= 2] or [phrase(run)]
+            one = [len(w) == 1 for w in ws for _ in w]          # per character: does it sit in a one-character word?
+            pairs = ['"%s"' % run[i:i + 2] for i in range(len(run) - 1) if one[i] or one[i + 1]]
+            out += [p for p in dict.fromkeys(pairs) if p not in out]
     out += ['"%s"' % w.lower() for w in re.findall(r"[A-Za-z0-9]+", term) if len(w) >= 2]
     return out
 

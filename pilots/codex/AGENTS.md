@@ -9,7 +9,7 @@ This is one person's Base + Equipment. You are the pilot, not the owner: the jud
 ## What you should know at boot
 
 - Rules: `self/RULES.md`. Read the few lines relevant to this decision first (`sed -n`); you may disagree, but you must say which line and why. Hard limits are not open to disagreement.
-- Flight log (records): `self/records/<date>-<slug>.md`. A record holds a judgment, not a diary. **You gave the owner options and he chose one → write one record on the spot**, before you move on. Write it (tool · by · situation · verdict + 依据 / 最强反证 / 什么会改判) before you show him anything; fill in `chosen` when he answers, `outcome` when he tells you how it went. `by` reads `codex · <model> · <date>`.
+- Flight log (records): `self/records/<date>-<slug>.md`. A record holds a judgment, not a diary. **You gave the owner options and he chose one → write one record on the spot**, before you move on. Write it (tool · by · situation · verdict + 依据 / 最强反证 / 什么会改判) before you show him anything; fill in `chosen` when he answers, `outcome` when he tells you how it went. `by` reads `codex · <model> · <date>`. A judgment that names a day on which it will be settled (a prediction, a bet, a checkpoint) carries that day as `due: YYYY-MM-DD`; from that day the boot panel and `plug check` say it is due until `outcome` is filled.
 - Facts: `self/facts/`; how he talks: `self/style.md`.
 - Refit requests (proposals): `proposals/pending/<date>-<slug>.md` (target · base · from + 改成什么 / 为什么 / 最强反证; put the whole new file in a code block under 改成什么). Compute `base` with `plug hash <target file>`. Proposals do not appear in your reply.
 - Human-readable index: `index.md`; each equipment's playbook directory: `tools/<equipment>/playbooks/INDEX.md`.

@@ -1,5 +1,6 @@
 # Shapes: the field table for the three strict shapes, and parsing of observation lines / rule lines / corpus docs.
 # Every way frontmatter can be out of shape is broken once here.
+from datetime import date
 from pathlib import Path
 from entryplug import shapes
 
@@ -61,6 +62,22 @@ def test_record_and_proposal_shapes():
     assert parse(mat, "material")["errors"] == []
     assert any("date" in e for e in parse(mat.replace("2026-07-10", "July"), "material")["errors"])
     assert any("description" in e for e in parse("---\nname: x\n---\nbody\n", "manual")["errors"])
+
+
+def test_record_due_is_an_optional_calendar_day():
+    """D86: `due` is the day a judgment is to be settled. PyYAML reads an unquoted day as a date and a quoted one as
+    a string; both are valid. Anything that is not a calendar day YYYY-MM-DD is a shape ERROR."""
+    rec = "---\ntool: sunzi\nby: codex · gpt-5 · 2026-08-21\nsituation: s\nverdict: v\n%soutcome:\n---\n## 依据\na\n## 最强反证\nb\n## 什么会改判\nc\n"
+    for line in ("due: 2026-11-16\n", 'due: "2026-11-16"\n'):
+        r = parse(rec % line, "record")
+        assert r["errors"] == [] and shapes.due_date(r["fm"]) == date(2026, 11, 16), line
+    for line in ("due: 2026-11\n", "due: next week\n", "due: 20261116\n", "due: 2026-11-16 10:00:00\n", 'due: "2026-02-30"\n'):
+        assert parse(rec % line, "record")["errors"] == ["due must be YYYY-MM-DD"], line
+    impossible = parse(rec % "due: 2026-02-30\n", "record")["errors"]     # PyYAML raises on this one; like bad YAML
+    assert impossible[0] == "frontmatter holds an impossible date: day is out of range for month", impossible
+    absent = parse(rec % "", "record")
+    assert absent["errors"] == [] and shapes.due_date(absent["fm"]) is None
+    assert parse(rec % "due:\n", "record")["errors"] == []               # left empty, like chosen / outcome
 
 
 def test_parse_rules():

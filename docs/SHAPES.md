@@ -37,6 +37,7 @@ Observation lines (the `- ` lines under `## 观察`):
 |---|---|---|
 | tool · by · situation · verdict | yes | by = pilot · model · date; the verdict is written and saved before the owner sees it |
 | chosen · outcome | filled in later | chosen = what the owner picked; outcome may say 它对 / 我对 / 说不清 |
+| due | no | the calendar day this judgment is to be settled, `YYYY-MM-DD` (a YAML date or a quoted string); from that day `plug status` shows one informational line and `plug check` a `due` WARNING until `outcome` is filled, in place of the 30-day `outcome` WARNING |
 
 Three fixed body sections: `依据` (any R-id it names must exist; citing `records/…` counts as citing a record;
 `(src: doc#seq "sentence")` or `^pNNNN` counts as a quote) · `最强反证` · `什么会改判`. A disagreement is

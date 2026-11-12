@@ -1,24 +1,26 @@
 # What: shape v1 — the field table and per-file validation for entry (dict / playbook) · record (flight log) ·
 #       proposal (refit request) · material · manual · the RULES.md rule file · corpus doc; plus parsing of
-#       observation lines, rule lines, [[links]] and ## sections.
+#       rule lines, [[links]] and ## sections (observation lines: observations.py), and when a record's outcome is owed.
 # In:   one file's text (frontmatter + body) and its area name (from config.walk).
 # Out:  a structured dict (fm · body · errors · obs · links · sections); parse_rules / parse_doc for rules and corpus.
 # Not:  never crosses files ([[link]] resolution, anchor-sentence checks and R-id existence live in check);
 #       never reads the corpus directory; never writes anything.
-# Who:  index (validation + summary fields) · check (findings) · apply (proposal parsing) · numbers (record fields).
+# Who:  index (validation + summary fields + proposal reasons) · check (findings) · apply (proposal parsing) · numbers
+#       · status (records past their due day).
 # Note: section headings and markers below are shape v1 on-disk vocabulary, not prose — they stay as written.
-#       Observation line: `- [?]? statement [[link]]* ^pNNNN (src: doc-id#seq "anchor sentence")`;
-#       synthesis line `(src: ^p1 ^p2)`; no original sentence `(src: doc p.12 [未锚])`.
+#       A record's `due` is the calendar day it is to be settled on; from that day its outcome is owed (D86).
 #       Rule line: `- R12 · statement [YYYY-MM · source]`; `到期 YYYY-MM-DD` / `复核 YYYY-MM` are read by the machine.
 #       Shape v1 only gains optional fields (§6.6); unknown keys are an ERROR in the three strict shapes.
-# Deps: stdlib + PyYAML.
+# Deps: stdlib + PyYAML · observations.
 import re
+from datetime import date, datetime
 import yaml
+from .observations import parse_observations
 
 SHAPES = {
     "entry": {"required": ["kind", "title"], "optional": ["aliases", "legacy_id", "origin", "situation", "when_not", "stance"],
               "kinds": ("concept", "method", "playbook"), "playbook": ["situation", "when_not", "stance"]},
-    "record": {"required": ["tool", "by", "situation", "verdict"], "optional": ["chosen", "outcome"],
+    "record": {"required": ["tool", "by", "situation", "verdict"], "optional": ["chosen", "outcome", "due"],
                "headings": ["依据", "最强反证", "什么会改判"]},
     "proposal": {"required": ["target", "base", "from"], "optional": [], "headings": ["改成什么", "为什么", "最强反证"]},
     "material": {"required": ["date"], "optional": ["kind", "title", "source", "expires"]},
@@ -26,12 +28,12 @@ SHAPES = {
 }
 AREA_SHAPE = {"dict": "entry", "playbook": "entry", "record": "record", "proposal": "proposal",
               "material": "material", "manual": "manual"}
-RE_SRC = re.compile(r"\(src:\s*(.*?)\)\s*$")
-RE_ANCHOR = re.compile(r"\^p\d+")
 RE_LINK = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 RULE_ID = r"[A-Z]{1,2}\d{1,3}[a-z]?"        # B1 · J12 · P2a — a lowercase suffix is part of the id
 RE_RULE = re.compile(r"^\s*[-*]\s*(%s)\s*[·・:：]\s*(.*)$" % RULE_ID)
 RE_DATE = re.compile(r"\d{4}-\d{2}(?:-\d{2})?")
+RE_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+OUTCOME_DAYS = 30                           # a record with no `due` owes its outcome once it is this many days old
 RE_HEAD = re.compile(r"^(?:[A-Za-z_]+|标题|来源|日期|主讲)\s*[:：]\s*(.*)$")
 SEP = re.compile(r"^={3,}(?:\s*(.*?)\s*={3,})?\s*$")
 RE_PARA = re.compile(r"^\[(\d+:\d{2}(?::\d{2})?|¶\d+)\]\s*(.*)$")
@@ -49,25 +51,35 @@ def split_frontmatter(text):
         fm = yaml.safe_load(m.group(1)) or {}
     except yaml.YAMLError as e:
         return None, text[m.end():], "frontmatter is not valid YAML: " + str(e).splitlines()[0]
+    except ValueError as e:                 # PyYAML builds an unquoted 2026-02-30 into a date and raises (D86)
+        return None, text[m.end():], "frontmatter holds an impossible date: " + str(e)
     if not isinstance(fm, dict):
         return None, text[m.end():], "frontmatter is not a mapping"
     return fm, text[m.end():], None
 
 
-def sections(body):
-    """## heading → text, in order. The '' key holds whatever precedes the first heading."""
-    out, cur, fence = {"": []}, "", 0                 # fence = length of the open run, 0 when outside one
-    for line in body.splitlines():
+def section_blocks(lines):
+    """Body lines → every ## section in order as (heading, index of its first line, its lines); '' = before the
+    first heading. Index reads it with exact line numbers (D84); sections() merges it by heading."""
+    out, fence = [("", 0, [])], 0                     # fence = length of the open run, 0 when outside one
+    for i, line in enumerate(lines):
         run = re.match(r"^(`{3,})", line)
         if run:                                       # only a run at least as long closes the one that is open,
             n = len(run.group(1))                     # so ``` inside a ```` block stays inert (same rule as apply)
             fence = n if not fence else (0 if n >= fence else fence)
         m = None if fence else re.match(r"^##\s+(.+?)\s*$", line)
         if m:
-            cur = m.group(1).strip()
-            out.setdefault(cur, [])
+            out.append((m.group(1).strip(), i + 1, []))
         else:
-            out[cur].append(line)
+            out[-1][2].append(line)
+    return out
+
+
+def sections(body):
+    """## heading → text, in order. The '' key holds whatever precedes the first heading."""
+    out = {}
+    for head, _, lines in section_blocks(body.splitlines()):
+        out.setdefault(head, []).extend(lines)
     return {k: "\n".join(v).strip() for k, v in out.items()}
 
 
@@ -75,38 +87,29 @@ def links(body):
     return [m.group(1).strip() for m in RE_LINK.finditer(body)]
 
 
-def parse_observations(body):
-    """`- ` lines under `## 观察`. Each: text · unreviewed · anchor · src · refs · doc · seq · quote · unanchored · missing_src."""
-    out, in_obs = [], False
-    for n, line in enumerate(body.splitlines(), 1):
-        if line.startswith("## "):
-            in_obs = line[3:].strip().startswith("观察")
-            continue
-        if not in_obs or not re.match(r"^\s*-\s+", line):
-            continue
-        item = {"line": n, "text": line.strip()[2:].strip(), "unreviewed": False, "anchor": None, "src": None,
-                "refs": [], "doc": None, "seq": None, "quote": None, "unanchored": False, "missing_src": False}
-        if item["text"].startswith("[?]"):
-            item["unreviewed"] = True
-            item["text"] = item["text"][3:].strip()
-        m = RE_SRC.search(item["text"])
-        if not m:
-            item["missing_src"] = True
-        else:
-            src, head = m.group(1).strip(), item["text"][:m.start()]
-            item["src"] = src
-            a = RE_ANCHOR.findall(head)
-            item["anchor"] = a[-1] if a else None
-            item["refs"] = RE_ANCHOR.findall(src)
-            item["unanchored"] = "[未锚]" in src
-            q = re.search(r'"([^"]+)"|「([^」]+)」', src)
-            item["quote"] = (q.group(1) or q.group(2)).strip() if q else None
-            rest = RE_ANCHOR.sub(" ", src)
-            d = re.search(r"([A-Za-z0-9][\w\-\.]*)(?:#([\w\-:\.]+))?", rest)
-            if d:
-                item["doc"], item["seq"] = d.group(1), d.group(2)
-        out.append(item)
-    return out
+def due_date(fm):
+    """A record's `due` as a date; None when absent or empty, and when it is not a calendar day (validate says so).
+    PyYAML reads an unquoted 2026-11-16 as a date and a quoted one as a string: both are the same day. A date with a
+    time of day is not a day."""
+    v = fm.get("due")
+    if isinstance(v, date) and not isinstance(v, datetime):
+        return v
+    if isinstance(v, str) and RE_DAY.fullmatch(v.strip()):
+        try:
+            return date.fromisoformat(v.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def outcome_owed(fm, age, today):
+    """Is this record's outcome owed today? With a `due` day, from that day on whatever its age; without one, once it
+    is OUTCOME_DAYS old. One definition for check (the due / outcome warnings), numbers (outcome pending), the report
+    and the boot panel, so they can never disagree (D86)."""
+    if str(fm.get("outcome") or "").strip():
+        return False
+    due = due_date(fm)
+    return due <= today if due else age >= OUTCOME_DAYS
 
 
 def validate(shape, fm, body):
@@ -135,6 +138,8 @@ def validate(shape, fm, body):
         errs += ["body is missing section ## " + h for h in spec["headings"] if h not in have]
     if shape == "material" and fm.get("date") is not None and not RE_DATE.match(str(fm["date"])):
         errs.append("date must be YYYY-MM-DD")
+    if shape == "record" and fm.get("due") not in (None, "") and due_date(fm) is None:
+        errs.append("due must be YYYY-MM-DD")
     return errs
 
 

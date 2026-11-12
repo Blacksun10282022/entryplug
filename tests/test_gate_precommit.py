@@ -52,6 +52,23 @@ def test_a_malformed_staged_record_is_refused_by_shape(repo):
     assert r.returncode == 1 and "shape error, commit refused" in r.stderr and "2026-08-29-bad.md" in r.stderr
 
 
+def test_a_record_with_due_passes_and_a_malformed_due_is_refused(repo):
+    """D86: `due` is an optional record field, so a record carrying a calendar day commits; one carrying anything
+    else is refused through the same shape path (the gate itself knows nothing about `due`)."""
+    rel = "self/records/2026-08-29-due.md"
+    rec = repo["root"] / rel
+    body = "---\ntool: sunzi\nby: x · y · 2026-08-29\nsituation: s\nverdict: v\n%s---\n## 依据\na\n## 最强反证\nb\n## 什么会改判\nc\n"
+    for line in ("due: 2026-11-16\n", 'due: "2026-11-16"\n'):
+        rec.write_text(body % line, encoding="utf-8")
+        r = run_gate(repo["root"], [rel])
+        assert r.returncode == 0, (line, r.stderr)
+    for line, why in (("due: next week\n", "due must be YYYY-MM-DD"), ("due: 2026-02-30\n", "impossible date")):
+        rec.write_text(body % line, encoding="utf-8")
+        r = run_gate(repo["root"], [rel])
+        assert r.returncode == 1 and "shape error, commit refused" in r.stderr and rel in r.stderr, (line, r.stderr)
+        assert why in r.stderr and "Traceback" not in r.stderr, (line, r.stderr)
+
+
 def test_real_git_hook_blocks_direct_write_but_allows_records(git_repo):
     root = git_repo["root"]
     hook = root / ".git" / "hooks" / "pre-commit"

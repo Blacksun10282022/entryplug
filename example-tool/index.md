@@ -1,4 +1,4 @@
-# index · 38 files · 113 chunks · entryplug 0.1.0
+# index · 38 files · 111 chunks · entryplug 0.1.0
 ## tools/sunzi
 - tools/sunzi/SKILL.md · sunzi · manual · 
 - tools/sunzi/READING.md · READING · reading · 

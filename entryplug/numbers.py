@@ -12,9 +12,10 @@
 #       Blind-valid (D10): in the version where git first saw the file, verdict was set and chosen was empty; a
 #       record written with chosen already filled is "non-blind" and excluded; untracked files are out of the
 #       denominator. Agreement (D09): chosen normalises to verdict, or starts with one of the owner's assent words.
-#       n>=30 with an agreement rate above 95% is automatically flagged as likely sycophancy.
+#       n>=30 with an agreement rate above 95% is automatically flagged as likely sycophancy. "Outcome pending" =
+#       shapes.outcome_owed: past its `due` day, or 30 days old when it has none — exactly what check warns about.
 #       The Chinese literals below are content vocabulary (record sections and the owner's own wording), not prose.
-# Deps: stdlib (subprocess only to ask git) · shapes.split_frontmatter.
+# Deps: stdlib (subprocess only to ask git) · shapes (split_frontmatter · rule_refs · outcome_owed).
 import math, re, subprocess
 from . import __version__, shapes
 
@@ -62,14 +63,14 @@ def ratio(k, n, pct=True):
     return "%d/%d  %d%% [%d,%d]" % (k, n, round(100 * k / n), lo, hi)
 
 
-def tool_stats(cfg, recs, docs, anchors, rule_ids):
+def tool_stats(cfg, recs, docs, anchors, rule_ids, today):
     s = {"n": len(recs), "unanswered": 0, "pending": 0, "valid": 0, "nonblind": 0, "untracked": 0, "agree": 0,
          "right": {k: 0 for k in RIGHT_MARKERS}, "q_ok": 0, "q_all": 0, "r_ok": 0, "r_all": 0, "four": 0, "cite": 0}
     for r in recs:
         fm, basis = r["fm"], r["sections"].get("依据", "")
         chosen, outcome = str(fm.get("chosen") or "").strip(), str(fm.get("outcome") or "").strip()
         s["unanswered"] += not chosen
-        s["pending"] += (not outcome) and r["age"] >= 30
+        s["pending"] += shapes.outcome_owed(fm, r["age"], today)     # what check warns about, due or outcome (D86)
         if chosen:
             v = first_version(cfg["root"], r["rel"])
             if v is None:
@@ -104,7 +105,7 @@ def tool_stats(cfg, recs, docs, anchors, rule_ids):
 def page(cfg, records, today, docs=None, anchors=None, rule_ids=None):
     docs, anchors, rule_ids = docs or {}, anchors or set(), rule_ids or set()
     tools = [t["name"] for t in cfg["tools"]] or sorted({r["fm"].get("tool") for r in records})
-    stats = {t: tool_stats(cfg, [r for r in records if r["fm"].get("tool") == t], docs, anchors, rule_ids) for t in tools}
+    stats = {t: tool_stats(cfg, [r for r in records if r["fm"].get("tool") == t], docs, anchors, rule_ids, today) for t in tools}
     head = "# Sync rate (numbers page) · %s · machine entryplug %s · records %d (%s) · unanswered %d · outcome pending %d" % (
         today, __version__, len(records), " · ".join("%s %d" % (t, stats[t]["n"]) for t in tools) or "no equipment",
         sum(s["unanswered"] for s in stats.values()), sum(s["pending"] for s in stats.values()))

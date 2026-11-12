@@ -1,5 +1,6 @@
 # Verb search: a two-character Chinese word hits (ERROR-grade acceptance), alias expansion, the default scope is
-# the equipment layer, corpus needs saying, several queries merge, the row format, no reranking.
+# the equipment layer, corpus needs saying, several queries merge, the row format, no reranking, and a long
+# sentence keeps the bigrams around its one-character words (D85).
 import json
 import pytest
 from entryplug import search
@@ -123,3 +124,43 @@ def test_mcp_and_cli_no_index_warn_without_rebuilding(repo):
     assert repo["index_path"].read_bytes() == before and index.stale(repo)
     r = plug(repo["root"], "search", "newstaleword", "--json")
     assert r.returncode == 0 and json.loads(r.stdout)["total"] > 0 and not index.stale(repo)
+
+
+def fixed_segmentation(monkeypatch, table):
+    """Pin jieba's segmentation (as search sees it) for the runs in `table`; any other run is segmented for real.
+    Keeps the term tests independent of jieba's dictionary."""
+    real = search.jieba.lcut
+    monkeypatch.setattr(search.jieba, "lcut", lambda run, *a, **kw: list(table[run]) if run in table else real(run, *a, **kw))
+
+
+def test_long_run_adds_the_bigrams_around_one_character_words(monkeypatch):
+    """D85 amends D22: a run of >4 characters keeps its jieba words of >=2 chars and adds every bigram that touches
+    a one-character word. Runs of <=4 characters and runs without one-character words are unchanged."""
+    fixed_segmentation(monkeypatch, {"雾港灯塔守夜": ["雾港", "灯", "塔", "守夜"], "雾港守夜人家门": ["雾港", "守夜人", "家门"],
+                                     "灯塔守夜": ["灯", "塔", "守", "夜"], "灯塔灯塔亮": ["灯塔", "灯", "塔", "亮"],
+                                     "塔灯塔灯亮": ["塔", "灯", "塔", "灯", "亮"]})
+    # (a) one-character words in a long run: the words first, then the bigrams touching 灯 / 塔
+    assert search.term_parts("雾港灯塔守夜") == ['"雾港"', '"守夜"', '"港灯"', '"灯塔"', '"塔守"']
+    # (b) no one-character word: exactly what D22 produced
+    assert search.term_parts("雾港守夜人家门") == ['"雾港"', '"守夜 夜人"', '"家门"']
+    # (c) a run of 4 characters stays one bigram phrase, whatever the segmentation
+    assert search.term_parts("灯塔守夜") == ['"灯塔 塔守 守夜"']
+    # (d) a bigram equal to a word already emitted, or repeated in the run, is emitted once
+    assert search.term_parts("灯塔灯塔亮") == ['"灯塔"', '"塔灯"', '"塔亮"']
+    parts = search.term_parts("塔灯塔灯亮")                                     # 塔灯 occurs twice in the run
+    assert parts == ['"塔灯 灯塔 塔灯 灯亮"', '"塔灯"', '"灯塔"', '"灯亮"'] and len(parts) == len(set(parts))
+    assert search.fts_query("雾港灯塔守夜 fog", []) == '"雾港" OR "守夜" OR "港灯" OR "灯塔" OR "塔守" OR "fog"'
+
+
+def test_long_sentence_finds_a_two_character_term_split_into_single_characters(repo, monkeypatch):
+    """End to end: the passage holds 灯塔; the query sentence's segmentation splits 灯塔 into 灯 + 塔, and its
+    multi-character words occur nowhere in the content. Under D22 alone the sentence found nothing."""
+    from entryplug import index
+    page = repo["root"] / "tools/sunzi/dict/shi.md"
+    page.write_text(page.read_text(encoding="utf-8") + "\n灯塔整夜亮着。\n", encoding="utf-8", newline="\n")
+    index.build(repo)
+    assert "shi" in ids(search.search(repo, "灯塔", auto_index=False))          # the index holds the bigram
+    fixed_segmentation(monkeypatch, {"我想找那座灯塔守夜的人": ["我想", "找", "那座", "灯", "塔", "守夜", "的", "人"]})
+    res = search.search(repo, "我想找那座灯塔守夜的人", auto_index=False)
+    assert "shi" in ids(res), (res["total"], res["queries"])                    # D22 alone: 0 hits from 我想 / 那座 / 守夜
+    assert '"灯塔"' in res["queries"][0].split(" OR ")

@@ -6,10 +6,11 @@
 # Out:  run() → dict{errors, warnings, header, moved, records, proposals, materials, entries, orphans, numbers}.
 # Not:  never edits content (its only writes are an expired proposal and the numbers page); no score; no LLM.
 # Who:  cli (plug check) · gates/precommit (0 ERROR to pass) · apply (before and after landing) · status · tests.
-# Deps: stdlib (subprocess only to ask git) · shapes · config · numbers · trust (runs the equipment checks).
-import hashlib, os, re, sqlite3, subprocess, sys, time
+# Deps: stdlib · ages (file age; asks git) · shapes · config · numbers · trust (runs the equipment checks).
+import hashlib, os, re, sqlite3, sys, time
 from datetime import date
 from . import __version__, SHAPE_VERSION, config, shapes, trust
+from .ages import age_days, git_added
 
 HOOKS = ("precommit", "outbound", "precompact", "stop")
 VERBS = ("index", "check", "apply", "eval", "search", "status", "init", "mcp", "hash")
@@ -17,32 +18,6 @@ PATHISH = re.compile(r"(?<![\w/`.])((?:self|tools|proposals|playbooks|dict|corpu
 OTHER_PARTY = re.compile(r"^\s*[-*]\s*(让|叫|要求|告诉|向|逼|劝)对方")
 MAP_LIE = re.compile(r"(?i)sortie lock.{0,200}(only records|cannot veto|records, not a lock|obligation, not a fence)")
 DESC_ONE, DESC_TOTAL, EXPIRE_DAYS, HOOK_DAYS, NEW_DAYS = 1536, 4000, 30, 30, 30
-
-
-def git_added(root):
-    """{rel: date first committed}; {} when this is not a git repo."""
-    try:
-        out = subprocess.run(["git", "-c", "core.quotePath=false", "log", "--diff-filter=A", "--format=@%cs", "--name-only"], cwd=str(root),
-                             capture_output=True, text=True, encoding="utf-8").stdout
-    except OSError:
-        return {}
-    added, d = {}, None
-    for line in out.splitlines():
-        if line.startswith("@"):
-            d = line[1:]
-        elif line.strip() and d:
-            added.setdefault(line.strip(), d)
-    return added
-
-
-def age_days(f, fm, added, today):
-    """File age: date prefix in the filename → date in the `by` field → date first committed → mtime."""
-    m = re.match(r"(\d{4}-\d{2}-\d{2})", f["path"].name) or re.search(r"(\d{4}-\d{2}-\d{2})", str(fm.get("by") or ""))
-    s = m.group(1) if m else added.get(f["rel"])
-    try:
-        return (today - date.fromisoformat(s)).days if s else int((time.time() - f["path"].stat().st_mtime) // 86400)
-    except ValueError:
-        return 0
 
 
 def quote_in(docs, doc_id, quote):
@@ -176,7 +151,12 @@ def run(cfg, expire=True, tool_checks=True, today=None):
             warn("rid_unsure", r["rel"], "%s look like rule ids but are not in RULES.md and are not written as a rule "
                  "citation (a line naming RULES, a 规则 heading, or `X9 · …`) — fine if it is a name (a plate, a source "
                  "label); a meant rule needs its real id" % "、".join(unsure))
-        if not r["fm"].get("outcome") and r["age"] >= 30:
+        due, r["owed"] = shapes.due_date(r["fm"]), shapes.outcome_owed(r["fm"], r["age"], today)
+        if r["owed"] and due:               # a record with a due day is settled by its own date, not the 30-day rule (D86)
+            ago = (today - due).days
+            warn("due", r["rel"], "record was due for settlement on %s (%s) and has no outcome; settle it: fill outcome"
+                 % (due, "today" if not ago else "%d day%s ago" % (ago, "" if ago == 1 else "s")))
+        elif r["owed"]:
             warn("outcome", r["rel"], "record has had no outcome for %d days" % r["age"])
     seen_p = {}
     for p in [x for x in proposals if x["sub"] == "pending"]:

@@ -123,3 +123,76 @@ def test_emit_context_keeps_every_ng_line(repo):
     text = "ENTRY PLUG — INSERTION SEQUENCE\n[OK] a ... fine\n[NG] b ... broken\n[NG] c ... also broken\nSYNC RATE 50.0% — PATTERN ORANGE"
     b = status.brief(text)
     assert b.startswith("entry plug boot: SYNC RATE 50.0%") and b.count("[NG]") == 2 and "[OK]" not in b and b.endswith(status.PILOT_ONLY)
+
+
+# The bare example panel exactly as it read before D86 (only the measured milliseconds vary).
+BARE = ["ENTRY PLUG — INSERTION SEQUENCE",
+        "[OK] LCL pressure ....... index.sqlite (38 docs, <ms>)",
+        "[OK] A10 nerve link ..... self/ (RULES 8 · style · facts 1 · records 3)",
+        "[NG] AT-Field ........... deny MISSING · pre-commit NOT installed",
+        "[NG] Berserk lock ....... no pre-commit hook [NG] Sortie lock ... hook not wired",
+        "[OK] Equipment bay ...... 1 registered (sunzi) · 1 pending",
+        "[--] plug-off ........... not present",
+        "SYNC RATE 50.0% — PATTERN ORANGE: the AT-Field · the berserk lock · the sortie lock degraded; run plug init --pilot both"]
+OLD, SETTLED, NEW = ("self/records/2026-07-20-supplier-delay.md", "self/records/2026-08-21-counterpart-feigns-weakness.md",
+                     "self/records/2026-08-27-choose-venue.md")
+
+
+def put_due(cfg, rel, day):
+    p = cfg["root"] / rel
+    p.write_text(p.read_text(encoding="utf-8").replace("\noutcome:", "\ndue: %s\noutcome:" % day, 1), encoding="utf-8")
+    from entryplug import index
+    index.build(cfg)                                  # keep the LCL line [OK]: only the due line may differ
+
+
+def lines_of(cfg):
+    import re
+    return [re.sub(r"\d+ms\)", "<ms>)", l) for l in status.panel(cfg)[0].splitlines()]
+
+
+def test_the_due_line_appears_only_when_a_record_is_due(repo, monkeypatch):
+    """D86: a dated prediction passed its day by eleven days and neither the boot panel nor plug check said so.
+    A record whose due day has come with no outcome adds one [--] line, not counted; otherwise the panel is the
+    same, byte for byte, as before."""
+    from datetime import date, timedelta
+    monkeypatch.delenv("KB_APPROVE", raising=False)
+    today = date.today()
+    assert lines_of(repo) == BARE
+    put_due(repo, NEW, today + timedelta(days=5))                   # not yet due
+    put_due(repo, SETTLED, today - timedelta(days=30))               # due long ago, but settled
+    assert lines_of(repo) == BARE
+    put_due(repo, OLD, today - timedelta(days=11))
+    line = "[--] Records due ........ 1 due, no outcome yet: 2026-07-20-supplier-delay (due %s) — settle it by filling outcome" % (
+        today - timedelta(days=11))
+    assert lines_of(repo) == BARE[:7] + [line] + BARE[7:]             # same verdict, same sync rate, same exit
+    assert status.panel(repo)[1] == 0
+
+
+def test_the_brief_carries_the_due_line_and_plug_off_silences_it(repo, monkeypatch):
+    from datetime import date, timedelta
+    monkeypatch.delenv("KB_APPROVE", raising=False)
+    today = date.today()
+    put_due(repo, OLD, today)
+    put_due(repo, NEW, '"%s"' % (today - timedelta(days=3)))
+    text = status.panel(repo)[0]
+    due = "[--] Records due ........ 2 due, no outcome yet: oldest 2026-08-27-choose-venue (due %s), and 1 more — settle them by filling outcome" % (
+        today - timedelta(days=3))
+    assert due in text.splitlines()
+    b = status.brief(text)
+    assert b.startswith("entry plug boot: SYNC RATE 50.0%") and due in b and b.endswith(status.PILOT_ONLY) and "\n" not in b
+    assert "[--] plug-off" not in b                                    # only the due line joins the [NG] lines
+    (repo["root"] / ".plug-off").write_text("", encoding="utf-8")
+    text = status.panel(repo)[0]
+    assert "Records due" not in text and "Records due" not in status.brief(text)
+
+
+def test_plug_status_reports_a_due_record_and_writes_nothing(repo):
+    from datetime import date
+    put_due(repo, OLD, date.today())
+    root = repo["root"]
+    def tree():
+        return {p.relative_to(root).as_posix(): (p.stat().st_size, p.stat().st_mtime_ns) for p in root.rglob("*")}
+    before = tree()
+    r = plug(root, "status")
+    assert "[--] Records due ........ 1 due, no outcome yet: 2026-07-20-supplier-delay" in r.stdout, r.stdout
+    assert tree() == before

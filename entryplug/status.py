@@ -11,8 +11,10 @@
 # Note: the sync rate is simply passed/total over the counted checks; .plug-off is informational and is not
 #       counted. A failing line prints [NG] and the verdict becomes PATTERN ORANGE with the layer and a fix hint.
 #       An index behind the content is [NG] too, with how far behind (D83), but still searchable, so exit stays 0.
+#       Records whose `due` day has come with no outcome get one [--] line, informational like .plug-off (D86).
 # Deps: stdlib json · sqlite3 (via search) · config · shapes · index.
-import json, os, time
+import json, os, re, time
+from datetime import date
 from pathlib import Path
 from . import config, shapes, search, trust, index
 
@@ -24,6 +26,9 @@ PILOT_ONLY = "(boot line for you, the pilot: never paste it, a hook or trust sta
 
 WIDTH = 20
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
+DUE_LABEL = "Records due"
+RE_DUE = re.compile(rb"(?m)^due[ \t]*:")
+HEAD_BYTES = 4096
 
 
 def dots(label, width=WIDTH):
@@ -142,6 +147,44 @@ def check_equipment(cfg):
     return (not gone), detail + ("" if not gone else " · MISSING: " + ", ".join(gone))
 
 
+def due_records(cfg, today=None):
+    """Records whose `due` day has come and whose outcome is empty, oldest first: [(day, stem)]. This runs at every
+    boot over every record, so a file is YAML-parsed only when its frontmatter bytes hold a `due:` line (D86); the
+    rule itself is shapes.outcome_owed, the same one check and numbers read."""
+    d, today, out = cfg["records_dir"], today or date.today(), []
+    for p in sorted(d.glob("*.md")) if d.is_dir() else []:
+        try:
+            with open(p, "rb") as fh:
+                raw = fh.read(HEAD_BYTES)                # the frontmatter is near the top; the body is most of the bytes
+                end = raw.find(b"\n---", 3)              # the frontmatter's closing line
+                if end < 0 and raw.startswith(b"---"):
+                    raw += fh.read()                     # a frontmatter longer than the head: read the rest
+                    end = raw.find(b"\n---", 3)
+        except OSError:                                  # a directory named *.md, an unreadable file: not a record
+            continue
+        if not raw.startswith(b"---") or end < 0 or not RE_DUE.search(raw, 0, end):
+            continue
+        if config.excluded(cfg, p.relative_to(cfg["root"]).as_posix()):     # walk() skips these too
+            continue
+        fm = shapes.split_frontmatter(raw.decode("utf-8", errors="replace"))[0] or {}
+        day = shapes.due_date(fm)
+        if day and shapes.outcome_owed(fm, 0, today):     # with a due day the age is never read
+            out.append((day, p.stem))
+    return sorted(out)
+
+
+def due_line(cfg):
+    """One [--] line for the records due and unsettled, or None when there are none: a to-do, not a broken layer,
+    so it is not counted in the sync rate and never turns the verdict orange (D86)."""
+    due = due_records(cfg)
+    if not due:
+        return None
+    (day, stem), more = due[0], len(due) - 1
+    return "[--] %s%d due, no outcome yet: %s%s (due %s)%s — settle %s by filling outcome" % (
+        dots(DUE_LABEL), len(due), "oldest " if more else "", stem, day, ", and %d more" % more if more else "",
+        "them" if more else "it")
+
+
 LAYERS = {"index": "the index layer", "base": "the Base", "at-field": "the AT-Field",
           "berserk": "the berserk lock", "sortie": "the sortie lock", "equipment": "the equipment bay"}
 HINTS = {"index": "plug index", "base": "write self/RULES.md", "at-field": "plug init --pilot both",
@@ -168,6 +211,9 @@ def panel(cfg):
          "%s %s%s" % (mark(res["equipment"][0]), dots("Equipment bay"), res["equipment"][1]),
          "[--] %s%s" % (dots("plug-off"), "present — sortie lock, compaction pin and record reminder pass through"
                         if off else "not present")]
+    due = None if off else due_line(cfg)           # the plug is out: no record business
+    if due:
+        L.append(due)
     bad = [k for k, (ok, _) in res.items() if not ok]
     rate = 100.0 * (len(res) - len(bad)) / len(res)
     if bad:
@@ -179,9 +225,10 @@ def panel(cfg):
 
 
 def brief(text):
-    """The one line the pilot gets (D74): the verdict, plus every [NG] line so a degraded layer is still known."""
+    """The one line the pilot gets (D74): the verdict, plus every [NG] line so a degraded layer is still known, plus
+    the records-due line so the pilot raises it at session start (D86)."""
     lines = text.splitlines()
-    ng = [l.strip() for l in lines if l.startswith("[NG]")]
+    ng = [l.strip() for l in lines if l.startswith("[NG]") or l.startswith("[--] " + dots(DUE_LABEL))]
     verdict = lines[-1].strip() if lines else ""
     return " · ".join(["entry plug boot: " + verdict] + ng) + " " + PILOT_ONLY
 
