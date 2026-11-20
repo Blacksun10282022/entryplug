@@ -23,13 +23,14 @@ tools:
 pilots:                         # plug index mirrors every SKILL.md into these directories
   claude-code: {skills: .claude/skills, user_skills: "~/.claude/skills"}
   codex: {skills: .agents/skills, user_skills: "~/.agents/skills"}
+  antigravity: {skills: .agents/skills, user_skills: "~/.gemini/config/skills"}   # the app and the agy CLI alike; shares the Codex mirror
 
 outbound:                       # sortie lock: a hit is a deny decision on stdout (tool = regex on the tool name; match = regex on the command)
-  - tool: "^(Bash|PowerShell|shell)$"          # every shell tool the pilots expose; PowerShell is a real tool on Windows
+  - tool: "^(Bash|PowerShell|shell|run_command|send_command_input)$"   # every shell tool the pilots expose; PowerShell is a real tool on Windows; run_command and send_command_input are Antigravity's
     match: "(?i)\\b(curl|wget|ssh|scp|sendmail|Invoke-WebRequest|Invoke-RestMethod)\\b"
-  - tool: "^(Bash|PowerShell|shell)$"          # git [options] push — options may sit between; `git stash push` and a commit message saying push do not match
+  - tool: "^(Bash|PowerShell|shell|run_command|send_command_input)$"   # git [options] push — options may sit between; `git stash push` and a commit message saying push do not match
     match: "(?i)\\bgit\\b(?:\\s+-\\S+(?:\\s+[^-\\s]\\S*)?)*\\s+push\\b"
-  - tool: "^(Bash|PowerShell|shell)$"          # gh as a command, not the two letters inside a path
+  - tool: "^(Bash|PowerShell|shell|run_command|send_command_input)$"   # gh as a command, not the two letters inside a path
     match: "(?im)(?:^|[;&|(]\\s*)gh\\s"
   - tool: "^Artifact$"                         # publishing a page is an outward action, whatever it contains
   - tool: "(?i)^mcp__.*(send|post|submit|pay|email|message|publish)"

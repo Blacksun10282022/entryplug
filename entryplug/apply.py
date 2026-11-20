@@ -25,7 +25,8 @@ from . import config, shapes
 # Any of these in the environment means a coding agent is driving. Detected defensively: presence is enough,
 # the value is not inspected, and an unknown future marker simply is not caught (the hard lock stays pre-commit).
 AGENT_ENV = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_SESSION_ID",
-             "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CURSOR_AGENT", "AIDER_CHAT")
+             "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CURSOR_AGENT", "AIDER_CHAT",
+             "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID")     # set in every command Antigravity runs (D88)
 
 
 # The one check that blocks whether or not it was already there: it means the check refused to read the repo at

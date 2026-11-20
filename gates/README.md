@@ -6,9 +6,9 @@ Four scripts. One hook, one verb; one line of reason; each stamps `.kb/hooks/<na
 | script | prohibition | mounted on | hardness |
 |---|---|---|---|
 | `precommit.py` | ① berserk lock: a protected path cannot be committed without `KB_APPROVE=1`; a staged record or proposal must have its shape | git pre-commit (installed by `plug init`) · `plug.yaml: protected / unprotected / protect` | **Hard.** Refuses and nothing else since D75: no index rebuild, no check-up, no numbers page in the hook |
-| `outbound.py` | ② sortie lock: nothing goes out in the owner's name, ask first | PreToolUse (Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `.codex/hooks.json`), one list in `plug.yaml: outbound` | **Blocks on both** — one deny decision on stdout, exit 0, read by both pilots (D65). Hooks are still fail-open if the script never runs, and a tool name outside the matcher never reaches it |
-| `precompact.py` | (not a prohibition) the compaction pin | PreCompact + SessionStart(compact) | five facts, nothing else |
-| `stop.py` | (not a prohibition) the record reminder | Stop | reminder only: it never blocks, it never writes, it exits 0 always |
+| `outbound.py` | ② sortie lock: nothing goes out in the owner's name, ask first | PreToolUse (Claude Code `pilots/claude-code/hooks/hooks.json` · Codex `.codex/hooks.json` · Antigravity `.agents/plugins/entryplug/hooks.json`), one list in `plug.yaml: outbound` | **Blocks on all three** — one deny decision on stdout, exit 0 (D65); Antigravity's in its own shape, told from its payload (D88). Hooks are still fail-open if the script never runs, and a tool name outside the matcher never reaches it |
+| `precompact.py` | (not a prohibition) the compaction pin | PreCompact + SessionStart(compact) — not on Antigravity, which has no compaction event (D90) | five facts, nothing else |
+| `stop.py` | (not a prohibition) the record reminder | Stop — not on Antigravity, whose Stop hook can only keep the loop running (D90) | reminder only: it never blocks, it never writes, it exits 0 always |
 
 By hardness: pre-commit > `permissions.deny` (Claude Code only; `Edit(path)` form, see
 `pilots/claude-code/settings.template.json`) > hooks. Native Windows has no sandbox, so deny cannot stop a
@@ -41,6 +41,8 @@ plug index
 plug status                          # the boot self-check: every layer on one line
 plug check --contact claude-code     # first contact, four steps; all green or the integration is broken
 plug check --contact codex           # each Codex hook has to be trusted once, by hand
+plug init --pilot antigravity        # the workspace plugin .agents/plugins/entryplug/ (MCP + hooks) and GEMINI.md;
+plug check --contact antigravity     # one wiring for the desktop app and the agy CLI (pilots/antigravity/)
 ```
 
 By hand (if you would rather not use init): copy `gates/hooks/pre-commit` to

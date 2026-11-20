@@ -1,7 +1,8 @@
-# What: `plug init --pilot claude-code|codex|both` — install the gates and the pilot shells into one content repo:
-#       the pre-commit hook · .claude/settings.json (deny rules + hooks, merged, never overwritten) · .mcp.json ·
-#       the CLAUDE.md / AGENTS.md map (only when absent) · the manual mirror + agents/openai.yaml ·
-#       .codex/hooks.json and .codex/config.toml (merged) · three .gitignore lines · the work/ and workshop/ zones.
+# What: `plug init --pilot claude-code|codex|antigravity|both|all` — install the gates and the pilot shells into one
+#       content repo: the pre-commit hook · .claude/settings.json (deny rules + hooks, merged, never overwritten) ·
+#       .mcp.json · the CLAUDE.md / AGENTS.md / GEMINI.md maps (only when absent) · the manual mirror +
+#       agents/openai.yaml · .codex/hooks.json and .codex/config.toml (merged) · Antigravity's workspace plugin
+#       .agents/plugins/entryplug/ (D87) · the .gitignore lines · the work/ and workshop/ zones.
 #       `--link-skills` additionally copies every SKILL.md into the user-level skills directory (manual trigger).
 # In:   cfg · pilot. The machine's location = the repo this package lives in (gates/ must be there); the
 #       interpreter = the current python (the one entryplug is installed into).
@@ -18,10 +19,10 @@
 #       commands use the current interpreter's absolute path. The hook goes into .git/hooks/pre-commit (git pull
 #       leaves it alone; on Windows git runs it with sh); if the owner set core.hooksPath it goes there instead.
 #       Hooks belong in settings.json (Claude Code does not read .claude/hooks.json; the plugin form is in pilots/).
-# Deps: stdlib json · subprocess (only to ask git) · config · index.
+# Deps: stdlib json · subprocess (only to ask git) · config · index · antigravity (its plugin files).
 import json, os, re, shutil, subprocess, sys
 from pathlib import Path
-from . import config, index
+from . import antigravity, config, index
 
 REPO, PY = Path(__file__).resolve().parents[1], Path(sys.executable).as_posix()
 SELF_PROTECT = ["self/RULES.md", "self/facts/**", "self/style.md", "plug.yaml"]
@@ -149,7 +150,8 @@ def install_hook(cfg, log):
 def gitignore(cfg, log):
     p = cfg["root"] / ".gitignore"
     old = p.read_text(encoding="utf-8") if p.exists() else ""
-    need = [x for x in [Path(cfg["index"]).parts[0] + "/"] + [v["skills"].rstrip("/") + "/" for v in cfg["pilots"].values()] if x not in old.splitlines()]
+    need = list(dict.fromkeys(x for x in [Path(cfg["index"]).parts[0] + "/"] + [v["skills"].rstrip("/") + "/" for v in cfg["pilots"].values()]
+                              if x not in old.splitlines()))     # Codex and Antigravity share .agents/skills: one line, not two
     put(p, old.rstrip("\n") + ("\n" if old else "") + "\n".join(need) + "\n", log) if need else log.append(("already current", p))
 
 
@@ -198,6 +200,21 @@ def codex(cfg, log):
     put(toml, old.rstrip("\n") + ("\n\n" if old else "") + '[mcp_servers.entryplug]\ncommand = "%s"\nargs = ["-m", "entryplug.cli", "--root", "%s", "mcp"]\n' % (PY, cfg["root"].as_posix()), log)
 
 
+def agy(cfg, log):
+    """Antigravity: the desktop app and the agy CLI read the same .agents/, so one wiring serves both (D87) — the
+    workspace plugin (MCP server + hooks, rewritten whole: it is the machine's own folder), and GEMINI.md plus the
+    AGENTS.md map it overlays, each only when absent. Nothing user-level, and no deny layer exists on this side."""
+    bad = spaced(PY, (REPO / "gates").as_posix(), cfg["root"].as_posix())
+    if bad:
+        log.append(("WARNING", "Antigravity hooks: a path contains a space (%s) — they run under `cmd /c` as bare "
+                               "words, so they will not start. Move the machine, the content repo or python "
+                               "somewhere without spaces." % bad[0]))
+    for rel, data in antigravity.plugin_files(cfg, PY, REPO).items():
+        put(cfg["root"] / rel, json.dumps(data, ensure_ascii=False, indent=2) + "\n", log)
+    for name, src in (("AGENTS.md", "codex"), ("GEMINI.md", "antigravity")):
+        copy_if_absent(REPO / "pilots" / src / name, cfg["root"] / name, log)
+
+
 def user_skills_dir(cfg, pilot):
     """Where a pilot looks for user-level skills: plug.yaml's pilots.<name>.user_skills, else the default for
     that pilot. PLUG_USER_SKILLS redirects every pilot at once into <it>/<pilot> (tests and unusual layouts)."""
@@ -236,13 +253,15 @@ def run(cfg, pilot, link=False):
         return 1
     log = []
     install_hook(cfg, log), gitignore(cfg, log), zones(cfg, log)
-    pilots = ["claude-code", "codex"] if pilot == "both" else [pilot]
+    pilots = {"both": ["claude-code", "codex"], "all": ["claude-code", "codex", "antigravity"]}.get(pilot, [pilot])
     if "claude-code" in pilots:
         claude(cfg, log)
     if "codex" in pilots:
         codex(cfg, log)
+    if "antigravity" in pilots:
+        agy(cfg, log)
     index.mirror_skills(cfg)
-    log.append(("mirrored", "manuals → " + " · ".join(v["skills"] for v in cfg["pilots"].values())))
+    log.append(("mirrored", "manuals → " + " · ".join(dict.fromkeys(v["skills"] for v in cfg["pilots"].values()))))
     if link:
         link_skills(cfg, log, pilots)
     for status, path in log:

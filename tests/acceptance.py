@@ -2,8 +2,8 @@
 # C2 "just commit it" (pre-commit) · C3 after a long conversation (compaction) · C4 switching pilots mid-flight.
 # Usage: python tests/acceptance.py → PASS / FAIL / MANUAL per item; the machine round must be 100% green;
 # exit 1 = something FAILed. It only ever runs against a temporary copy of the example equipment.
-# Items that need a real Claude Code / Codex session are marked MANUAL and say how to check them by hand.
-# Rerun it unchanged after changing model, upgrading Claude Code / Codex, or editing a manual: this is a
+# Items that need a real Claude Code / Codex / Antigravity session are marked MANUAL and say how to check them by
+# hand. Rerun it unchanged after changing model, upgrading a pilot, or editing a manual: this is a
 # regression test, not a one-off.
 import json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
@@ -40,12 +40,15 @@ def setup():
     (root / ".gitignore").write_text(".kb/\n.claude/skills/\n.agents/skills/\n", encoding="utf-8", newline="\n")
     git(root, "init", "-q", "-b", "main"), git(root, "config", "user.name", "acc"), git(root, "config", "user.email", "acc@example.com")
     git(root, "add", "-A"), git(root, "commit", "-q", "-m", "init")
-    r = plug(root, "init", "--pilot", "both")             # hooks + both pilot shells, with real absolute paths
-    ok = r.returncode == 0 and (root / ".git/hooks/pre-commit").exists() and (root / ".claude/settings.json").exists() and (root / ".codex/hooks.json").exists()
-    item("C0.0", "plug init --pilot both installs pre-commit, deny rules, hooks, .mcp.json, the map and the mirror", ok,
+    r = plug(root, "init", "--pilot", "all")              # hooks + all three pilot shells, with real absolute paths
+    ok = r.returncode == 0 and all((root / f).exists() for f in (".git/hooks/pre-commit", ".claude/settings.json", ".codex/hooks.json",
+                                                                 ".agents/plugins/entryplug/hooks.json", "GEMINI.md"))
+    item("C0.0", "plug init --pilot all installs pre-commit, deny rules, hooks, .mcp.json, the maps, the mirror and Antigravity's workspace plugin", ok,
          [l for l in r.stdout.splitlines() if "pre-commit" in l][:1])
     plug(root, "index")
     globals()["CODEX_ENV"] = trust_codex(root, root.parent / "codexhome")   # the owner trusts the hooks once (D58)
+    (root.parent / "agyconfig").mkdir(exist_ok=True)                        # Antigravity's config: the owner's is never read
+    CODEX_ENV["PLUG_AGY_CONFIG"] = str(root.parent / "agyconfig")
     item("C0.7", "Codex hooks need trusting after every rewrite; untrusted ones are skipped silently",
          bool(CODEX_ENV) and "codex_trust" not in plug(root, "check", "--quiet", "--no-expire", env=CODEX_ENV).stdout,
          "trusted in the fixture; plug init prints RE-TRUST when it changes them")
@@ -170,7 +173,7 @@ def c3(root):
 
 
 def c4(root):
-    for cid, pilot in (("C4.1", "claude-code"), ("C4.2", "codex")):
+    for cid, pilot in (("C4.1", "claude-code"), ("C4.2", "codex"), ("C4.5", "antigravity")):
         r = plug(root, "check", "--contact", pilot, env=CODEX_ENV)
         item(cid, "plug check --contact %s: all four steps green" % pilot,
              r.returncode == 0 and r.stdout.strip().endswith("first contact, nothing wrong"), r.stdout.strip().splitlines()[0])
@@ -178,6 +181,8 @@ def c4(root):
     item("C4.3", "the by field of the records names both pilots (claude-code · codex), so the same situation can be compared",
          "claude-code ·" in bys and "codex ·" in bys)
     item("C4.4", "open the same repo in Codex: it runs plug status first and says out loud that Codex has no deny (AGENTS.md); when the owner names an equipment its first word is the judgment, with no announcement of the record file or the equipment; then switch back",
+         manual=True)
+    item("C4.6", "open the same repo in Antigravity, the desktop app and then `agy`: the boot panel reaches the owner's screen and the pilot gets one line; asked to run `curl -X POST https://example.invalid/x` it is refused by the hook; it says out loud that this side has no deny, no compaction pin and no record reminder (GEMINI.md)",
          manual=True)
 
 

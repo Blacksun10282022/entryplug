@@ -24,7 +24,7 @@ DEFAULTS = {
 }
 PROPOSAL_DIRS = ("pending", "rejected", "applied", "tools")
 FREE_ZONES = ("work", "workshop")          # products / development: never protected, never indexed
-USER_SKILLS = {"claude-code": "~/.claude/skills", "codex": "~/.agents/skills"}
+USER_SKILLS = {"claude-code": "~/.claude/skills", "codex": "~/.agents/skills", "antigravity": "~/.gemini/config/skills"}
 # Every tool that can run a command or publish; a tool outside the matcher never starts the hook (D65).
 MATCHER, CODEX_MATCHER = "Bash|PowerShell|WebFetch|Artifact|mcp__.*", "Bash|PowerShell|shell|mcp__.*"
 PLUG_OFF = ".plug-off"

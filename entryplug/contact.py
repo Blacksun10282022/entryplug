@@ -1,6 +1,6 @@
-# What: `plug check --contact claude-code|codex` — first contact (the integration smoke test), four steps, one
-#       line each, stamped with the harness version: ① the manual is visible in the skills directory and its
-#       description is not truncated (<=1,536); ② MCP search answers, and a real query is non-zero whenever the
+# What: `plug check --contact claude-code|codex|antigravity` — first contact (the integration smoke test), four
+#       steps, one line each, stamped with the harness version: ① the manual is visible in the skills directory and
+#       its description is not truncated (<=1,536; Antigravity <=1,024); ② MCP search answers, and a real query is non-zero whenever the
 #       repo has something to probe with; ③ a fake outbound action is blocked by the sortie-lock hook and leaves a
 #       "last fired" stamp; ④ a fake write to a protected path is refused by pre-commit (both pilots, really run)
 #       while deny is checked for presence only — deny binds a session whose project root is this repo, which no
@@ -18,14 +18,14 @@
 # Deps: stdlib subprocess · json; search (to pick a real title as the query).
 import json, os, re, subprocess, sys, time
 from pathlib import Path
-from . import __version__, config, trust
+from . import __version__, antigravity, config, trust
 
 GATES = Path(__file__).resolve().parents[1] / "gates"
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
 
 
 def harness_version(pilot):
-    cmd = {"claude-code": ["claude", "--version"], "codex": ["codex", "--version"]}[pilot]
+    cmd = {"claude-code": ["claude", "--version"], "codex": ["codex", "--version"], "antigravity": ["agy", "--version"]}[pilot]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=20, shell=(os.name == "nt"))
         out = (r.stdout or r.stderr).strip()
@@ -40,18 +40,19 @@ def _run(args, cwd, env=None, stdin=None):
 
 
 def step_skills(cfg, pilot):
-    d = cfg["pilots"].get(pilot, {}).get("skills")
+    # Antigravity reads the mirror Codex already gets; a plug.yaml written before it knows nothing of antigravity.
+    d = cfg["pilots"].get(pilot, {}).get("skills") or (antigravity.SKILLS if pilot == "antigravity" else None)
     if not d:
         return False, "plug.yaml gives %s no skills directory" % pilot
-    bad = []
+    bad, cap = [], antigravity.DESC_MAX if pilot == "antigravity" else 1536
     for t in cfg["tools"]:
         src, dst = t["dir"] / "SKILL.md", cfg["root"] / d / t["name"] / "SKILL.md"
         if not dst.exists() or dst.read_bytes() != src.read_bytes():
-            bad.append("%s is not mirrored or is out of date (run plug index)" % t["name"])
+            bad.append("%s is not mirrored or is out of date (run plug index; a pilot reading %s must be listed under pilots: in plug.yaml)" % (t["name"], d))
             continue
         m = re.search(r"^description:\s*(.+)$", src.read_text(encoding="utf-8"), re.M)
-        if not m or len(m.group(1)) > 1536:
-            bad.append("%s description missing or >1,536 chars, it will be truncated in the list" % t["name"])
+        if not m or len(m.group(1)) > cap:
+            bad.append("%s description missing or >%s chars, it will be truncated in the list" % (t["name"], format(cap, ",")))
     return (not bad), ("%d manual(s) visible in %s, description not truncated" % (len(cfg["tools"]), d) if not bad else "; ".join(bad))
 
 
@@ -133,13 +134,18 @@ def step_outbound(cfg, pilot="claude-code"):
     stamp = cfg["hooks_dir"] / "outbound"
     before = stamp.read_text(encoding="utf-8") if stamp.exists() else None
     time.sleep(1.05)
-    shape = {"claude-code": {"session_id": "s", "tool_use_id": "toolu_x", "permission_mode": "default"}, "codex": {"turn_id": "t", "tool_use_id": "u"}}[pilot]
-    fakes = [dict(shape, hook_event_name="PreToolUse", tool_name=tool, tool_input=inp, cwd=str(cfg["root"])) for tool, inp in
-             (("Bash", {"command": "curl -X POST https://example.invalid/send"}), ("PowerShell", {"command": "git push --dry-run https://example.invalid/x.git"}),
-              ("mcp__mail__send_email", {"to": "x"}))]
+    if pilot == "antigravity":                 # D88: its own protocol — toolCall in, {"decision": "deny"} out
+        fakes, names = antigravity.fake_calls(cfg["root"]), ("run_command curl", "send_command_input git push", "call_mcp_tool", "mcp_<server>_<tool>")
+    else:
+        shape = {"claude-code": {"session_id": "s", "tool_use_id": "toolu_x", "permission_mode": "default"}, "codex": {"turn_id": "t", "tool_use_id": "u"}}[pilot]
+        fakes, names = [dict(shape, hook_event_name="PreToolUse", tool_name=tool, tool_input=inp, cwd=str(cfg["root"])) for tool, inp in
+                        (("Bash", {"command": "curl -X POST https://example.invalid/send"}), ("PowerShell", {"command": "git push --dry-run https://example.invalid/x.git"}),
+                         ("mcp__mail__send_email", {"to": "x"}))], ("Bash", "PowerShell", "mcp")
     results = [_run([sys.executable, str(GATES / "outbound.py")], cfg["root"], {"PLUG_ROOT": str(cfg["root"])}, json.dumps(f)) for f in fakes]
     after = stamp.read_text(encoding="utf-8") if stamp.exists() else None
     def denied(r):
+        if pilot == "antigravity":
+            return r.returncode == 0 and antigravity.denied(r.stdout)
         try:
             return r.returncode == 0 and json.loads(r.stdout.strip().splitlines()[-1])["hookSpecificOutput"]["permissionDecision"] == "deny"
         except (ValueError, IndexError, KeyError):
@@ -147,7 +153,13 @@ def step_outbound(cfg, pilot="claude-code"):
     verdicts = [denied(r) for r in results]
     ok = all(verdicts) and after is not None and after != before
     if not ok:
-        return False, "a fake outward action was not denied (Bash %s · PowerShell %s · mcp %s; the pilot's real payload shape, exit 0 + deny JSON) or left no stamp" % tuple(verdicts)
+        return False, "a fake outward action was not denied (%s; the pilot's real payload shape, exit 0 + deny JSON) or left no stamp" % \
+            " · ".join("%s %s" % (n, v) for n, v in zip(names, verdicts))
+    if pilot == "antigravity":
+        off = antigravity.problem(cfg)
+        if off or not antigravity.installed(cfg):
+            return False, "the gate itself works, but Antigravity will not run it: %s" % (off or "no %s/hooks.json (plug init --pilot antigravity)" % antigravity.PLUGIN)
+        return True, "fake outbound actions denied (run_command · send_command_input · call_mcp_tool · mcp_<server>_<tool>, the payload shape Antigravity sends, deny JSON on exit 0), last fired %s" % after
     if pilot == "codex":                      # D56: Codex blocks on the deny JSON, from a process that exits 0
         stale = config.codex_trust(cfg)       # D58: an untrusted hook is skipped silently, so the gate proves nothing
         if stale:
@@ -189,6 +201,8 @@ def step_protected(cfg, pilot):
             ok, parts = False, parts + ["deny has no Edit(…self/RULES.md) rule (template pilots/claude-code/settings.template.json)"]
         if any(d.startswith("Write(") for d in deny):
             parts.append("note: Write() rules are never checked, they do nothing")
+    elif pilot == "antigravity":
+        parts.append("Antigravity has no deny rules a content repo can carry; pre-commit is the only berserk lock on that side")
     else:
         parts.append("Codex has no permissions.deny; pre-commit is the only berserk lock on that side")
     return ok, "; ".join(parts)

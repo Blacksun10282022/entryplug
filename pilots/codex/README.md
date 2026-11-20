@@ -1,7 +1,8 @@
 # pilots/codex · wiring up Codex, no code required
 
 The two pilots are equals: all state is files in the content repo, so switching pilots is one more person reading
-the same folder.
+the same folder. Antigravity reads this same `AGENTS.md` and the same `.agents/skills/` mirror, with its own
+`GEMINI.md` laid over them (`pilots/antigravity/`), so an edit to either reaches that pilot too.
 
 Shortest path: run `plug init --pilot codex` inside the content repo — it writes AGENTS.md (only when absent),
 mirrors the manuals plus `agents/openai.yaml`, writes the repo-level `.codex/hooks.json` and `.codex/config.toml`

@@ -9,7 +9,7 @@
 # Deps: stdlib · ages (file age; asks git) · shapes · config · numbers · trust (runs the equipment checks).
 import hashlib, os, re, sqlite3, sys, time
 from datetime import date
-from . import __version__, SHAPE_VERSION, config, shapes, trust
+from . import __version__, SHAPE_VERSION, antigravity, config, shapes, trust
 from .ages import age_days, git_added
 
 HOOKS = ("precommit", "outbound", "precompact", "stop")
@@ -184,9 +184,11 @@ def run(cfg, expire=True, tool_checks=True, today=None):
     if sum(len(d) for _, d in descs) > DESC_TOTAL:
         warn("desc", "tools", "manual descriptions total %d chars > the %d list budget" % (sum(len(d) for _, d in descs), DESC_TOTAL))
     # —— paths and commands · the map's claims · index.md · hooks · index freshness · equipment checks ——
-    maps = [(n, (root / n).read_text(encoding="utf-8"), root) for n in ("CLAUDE.md", "AGENTS.md") if (root / n).exists()]
+    maps = [(n, (root / n).read_text(encoding="utf-8"), root) for n in ("CLAUDE.md", "AGENTS.md", "GEMINI.md") if (root / n).exists()]
     for m in [x for x in [config.codex_trust(cfg)] if x]:
         warn("codex_trust", ".codex/hooks.json", m)
+    for m in [x for x in [antigravity.problem(cfg)] if x]:
+        warn("agy_plugin", antigravity.PLUGIN + "/hooks.json", m)
     for rel, x, _ in [m for m in maps if MAP_LIE.search(m[1])]:
         warn("map_claim", rel, "this map says the sortie lock only records / cannot veto — it does block, on both pilots (D56). A pilot told nothing stops it will act as if nothing does. Replace that line from pilots/")
     for rel, text, base in ([("self/RULES.md", rules["text"], root)] if rules else []) + \

@@ -20,7 +20,7 @@ import json, os, re, sys, time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from entryplug import config  # noqa: E402
+from entryplug import antigravity, config  # noqa: E402
 
 
 def match(rules, tool_name, tool_input):
@@ -51,24 +51,37 @@ def main():
     except (ValueError, OSError):
         data = {}
     try:
-        cfg = config.load(os.environ.get("PLUG_ROOT") or config.find_root(data.get("cwd")))
+        cfg = config.load(os.environ.get("PLUG_ROOT") or root_of(data))
     except FileNotFoundError:
         print("sortie lock: no plug.yaml found, passing through (fail-open)", file=sys.stderr)
         return 0
     if config.plug_off(cfg):
         return 0                              # .plug-off: the plug is out, nothing is checked
-    reason = match(cfg["outbound"], data.get("tool_name", ""), data.get("tool_input", {}))
+    agy = antigravity.tool_call(data)         # Antigravity's protocol: the payload's own shape says so (D88)
+    name, tool_input = agy or (data.get("tool_name", ""), data.get("tool_input", {}))
+    reason = match(cfg["outbound"], name, tool_input)
     if reason is None:
         return 0
     cfg["hooks_dir"].mkdir(parents=True, exist_ok=True)
     (cfg["hooks_dir"] / "outbound").write_text(time.strftime("%Y-%m-%dT%H:%M:%S"), encoding="utf-8")
     msg = ("sortie lock: %s is an outward action (list entry %s) — nothing goes out in the owner's name; "
-           "ask first" % (data.get("tool_name"), reason))
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": data.get("hook_event_name") or "PreToolUse",
+           "ask first" % (name, reason))
+    print(json.dumps(antigravity.deny(msg) if agy else
+                     {"hookSpecificOutput": {"hookEventName": data.get("hook_event_name") or "PreToolUse",
                                              "permissionDecision": "deny", "permissionDecisionReason": msg}},
                      ensure_ascii=False))     # the reason must be non-empty or the deny is rejected as invalid
     print(msg, file=sys.stderr)               # for the human reading a log; the decision above is what the pilots read
-    return 0                                  # both pilots honour the deny JSON from a process that exits 0 (D65)
+    return 0                                  # every pilot honours its deny JSON from a process that exits 0 (D65, D88)
+
+
+def root_of(data):
+    """The content repo: walk up from the agent's working directory, then from this process's own. Claude Code and
+    Codex run a hook in the project directory; Antigravity runs it in the plugin folder, which sits inside the
+    content repo even when the agent's cwd does not (D88)."""
+    try:
+        return config.find_root(data.get("cwd"))
+    except FileNotFoundError:
+        return config.find_root()
 
 
 if __name__ == "__main__":

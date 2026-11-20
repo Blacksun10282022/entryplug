@@ -1,7 +1,7 @@
 # What: `plug status` — the boot self-check. One line per real check, then a verdict. Nothing here is a guess:
 #       every line is a fact read off disk or measured (the index is really queried and timed).
 # In:   cfg. `--emit` wraps the panel for a SessionStart hook: the panel as systemMessage (the owner's screen),
-#       one verdict line as additionalContext (the pilot).
+#       one verdict line as additionalContext (the pilot); `--emit antigravity` says the same in Antigravity's shape.
 # Out:  the panel on stdout; exit code 0, or 1 only when the index layer itself is unusable (nothing can be
 #       searched, so the pilot must know before it starts).
 # Not:  never writes anything, never edits content, never injects rules or search results into the pilot;
@@ -12,11 +12,11 @@
 #       counted. A failing line prints [NG] and the verdict becomes PATTERN ORANGE with the layer and a fix hint.
 #       An index behind the content is [NG] too, with how far behind (D83), but still searchable, so exit stays 0.
 #       Records whose `due` day has come with no outcome get one [--] line, informational like .plug-off (D86).
-# Deps: stdlib json · sqlite3 (via search) · config · shapes · index.
+# Deps: stdlib json · sqlite3 (via search) · config · shapes · index · antigravity (its boot shape and plugin state).
 import json, os, re, time
 from datetime import date
 from pathlib import Path
-from . import config, shapes, search, trust, index
+from . import antigravity, config, shapes, search, trust, index
 
 # The panel is for the owner's eyes; the pilot gets one line. In the 2026-09-03 blind test both pilots copied the
 # whole panel, hook and trust status included, into answers meant for the owner (D73); since D74 the panel travels
@@ -55,7 +55,7 @@ def deny_list(root):
 def hooks_text(root):
     """Everything the pilots' hook configs say, as one blob — enough to see whether a gate is wired."""
     out = []
-    for f in (".claude/settings.json", ".claude/settings.local.json", ".codex/hooks.json"):
+    for f in (".claude/settings.json", ".claude/settings.local.json", ".codex/hooks.json", antigravity.PLUGIN + "/hooks.json"):
         p = root / f
         if p.exists():
             out.append(p.read_text(encoding="utf-8", errors="ignore"))
@@ -135,6 +135,9 @@ def check_sortie(cfg):
         return False, "hook not wired"
     if config.codex_trust(cfg):               # D58: Codex skips an untrusted hook silently — do not report armed
         return False, "armed for Claude Code; Codex has not trusted these hooks, so it skips them"
+    agy = antigravity.problem(cfg)            # D88: plugin switched off, or no outbound rule names its shell tool
+    if agy:
+        return False, agy
     return True, "armed" + (" (passing through: .plug-off)" if config.plug_off(cfg) else "")
 
 
@@ -189,7 +192,7 @@ LAYERS = {"index": "the index layer", "base": "the Base", "at-field": "the AT-Fi
           "berserk": "the berserk lock", "sortie": "the sortie lock", "equipment": "the equipment bay"}
 HINTS = {"index": "plug index", "base": "write self/RULES.md", "at-field": "plug init --pilot both",
          "berserk": "plug init --pilot both (and unset KB_APPROVE)",
-         "sortie": "plug init --pilot both — and if it is the Codex trust line above, open an interactive codex once and trust the hooks",
+         "sortie": "plug init --pilot both — and if it is the Codex trust line above, open an interactive codex once and trust the hooks; if it is Antigravity's, do what that line says",
          "equipment": "fix the tools: list in plug.yaml"}
 
 
@@ -242,8 +245,9 @@ def run(cfg, emit=False):
             text = panel(cfg)[0]
         except Exception as e:                # never let a broken panel take the session down with it
             text = "ENTRY PLUG — INSERTION SEQUENCE\n[NG] panel ............... could not be built (%s: %s)" % (type(e).__name__, e)
-        print(json.dumps({"systemMessage": text, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": brief(text)}},
-                         ensure_ascii=False))
+        out = antigravity.boot(text, brief(text)) if emit == "antigravity" else \
+            {"systemMessage": text, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": brief(text)}}
+        print(json.dumps(out, ensure_ascii=False))
         return 0
     text, code = panel(cfg)
     print(text)

@@ -111,6 +111,23 @@ Cuts made after the first blind A/B of an equipment manual, all on the machine's
 
 A stale index is now a degraded layer: `plug status` marks the index line [NG] with how far behind it is (exit stays 0, it is still searchable), and the search warning moves to the first line with the same numbers. D76's MCP half is corrected in place: the MCP search has been read-only since the 2026-09-07 audit and never rebuilds. Found when a content repo's index sat two days behind under an all-green panel. `python -m pytest` 139 passed; `python tests/acceptance.py` 24 automated items PASS, 0 FAIL, 4 MANUAL.
 
+## Changed on 2026-11-20 (D87–D90): a third pilot, Antigravity
+
+Antigravity's desktop app (engine 2.33.0) and its `agy` CLI (1.5.13) read one customization root, `.agents/`, so they
+are one pilot with one wiring. `plug init --pilot antigravity` (or `--pilot all`) writes the workspace plugin
+`.agents/plugins/entryplug/` — the MCP server, the sortie lock on PreToolUse, the boot panel on SessionStart — and
+`GEMINI.md`, an overlay on the `AGENTS.md` that Antigravity loads as well (D87). The sortie lock is the same script
+and the same list: `gates/outbound.py` recognises Antigravity's payload by its shape and answers in its form; the
+list has to name its two shell tools, `run_command` and `send_command_input`, and its MCP calls are renamed `mcp__…`
+so the existing MCP rule applies (D88). `plug status --emit antigravity` puts the panel on the owner's screen through
+`renderInfo.markdown` and gives the pilot one line (D89); the hooks guide's `metadata.user_markdown` is a field
+neither engine has, and the first live run lost the boot line to it. No deny layer, no compaction pin and no record
+reminder on that side, by decision (D90). `plug status`, `plug check` (`agy_plugin`) and `plug check --contact
+antigravity` report a switched-off plugin, or a list that does not name the shell tools, instead of an armed lock;
+`plug apply` refuses `ANTIGRAVITY_AGENT`. Seen live in `agy -p` against a scratch copy of the example: the boot line
+reached the model, `curl -X POST` was denied by the hook and did not run, MCP search answered. The app is MANUAL
+item C4.6. `python -m pytest` 162 passed; `python tests/acceptance.py` 25 automated items PASS, 0 FAIL, 5 MANUAL.
+
 ## Known and deliberate (2026-09-04)
 
 The machine repo locks nothing about itself (D79): a pilot working in `entryplug` can edit the gates that a content repo relies on. The owner declined to close this; the machine's protection is that he reads every diff before it is committed. The locks in a content repo are unaffected.
