@@ -72,10 +72,10 @@ def deny(reason):
 
 
 def boot(panel, line):
-    """The SessionStart answer in Antigravity's shape, D74's split kept: the panel goes to the owner's screen as the
-    message's renderInfo.markdown, which the model never reads (agy -p does not print it; whether the app shows it
-    is checked by hand); the model gets the one boot line as the system
-    message. Not metadata.user_markdown, which its own hooks guide names: neither engine has that field, and agy
+    """The SessionStart answer in Antigravity's shape, D74's split kept: the model gets the one boot line as the
+    system message; the panel rides in the message's renderInfo.markdown, which the model never reads and which
+    neither the app nor agy displays today (the owner runs plug status himself on this side; kept for a build that
+    renders it). Not metadata.user_markdown, which its own hooks guide names: neither engine has that field, and agy
     1.5.13 drops the whole hook with "cannot convert string to message" (D89)."""
     return {"injectSteps": [{"systemMessage": {"systemMessage": line, "renderInfo": {"markdown": "```\n%s\n```" % panel}}}]}
 

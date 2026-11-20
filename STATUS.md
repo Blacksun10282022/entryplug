@@ -119,8 +119,8 @@ are one pilot with one wiring. `plug init --pilot antigravity` (or `--pilot all`
 `GEMINI.md`, an overlay on the `AGENTS.md` that Antigravity loads as well (D87). The sortie lock is the same script
 and the same list: `gates/outbound.py` recognises Antigravity's payload by its shape and answers in its form; the
 list has to name its two shell tools, `run_command` and `send_command_input`, and its MCP calls are renamed `mcp__…`
-so the existing MCP rule applies (D88). `plug status --emit antigravity` sends the panel as
-`renderInfo.markdown`, meant for the owner's screen and never seen by the model, and gives the pilot one line (D89); the hooks guide's `metadata.user_markdown` is a field
+so the existing MCP rule applies (D88). `plug status --emit antigravity` gives the pilot one
+line; the panel rides in `renderInfo.markdown`, which neither the app nor agy displays, so on that side the owner runs `plug status` himself (D89); the hooks guide's `metadata.user_markdown` is a field
 neither engine has, and the first live run lost the boot line to it. No deny layer, no compaction pin and no record
 reminder on that side, by decision (D90). `plug status`, `plug check` (`agy_plugin`) and `plug check --contact
 antigravity` report a switched-off plugin, or a list that does not name the shell tools, instead of an armed lock;

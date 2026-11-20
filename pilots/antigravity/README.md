@@ -58,10 +58,12 @@ not read.
   this protocol from the payload's own shape (only Antigravity sends `toolCall`) and answers in it (D88); it names
   an MCP call `mcp__<server>__<tool>`, as the other two pilots do, so one outbound list covers all three.
 - SessionStart answers `{"injectSteps": [{"systemMessage": {"systemMessage": <line>, "renderInfo": {"markdown": <panel>}}}]}`:
-  the model reads only `systemMessage` (seen live); `renderInfo.markdown` is meant for the owner's screen and never
-  reaches the model. `agy -p` does not print it, and whether the app shows it is part of the MANUAL check. That is
-  D74's split — the panel for the owner, one boot line for the pilot. The hooks guide says
-  `metadata.user_markdown`; neither engine has that field, and agy drops the whole hook over it (D89).
+  the model reads only `systemMessage` (seen live). The owner does not see the panel on this side: Antigravity's
+  UI does not display an injected system message, and both engines drop `renderInfo` from a hook's step — in a
+  live app conversation and a live agy one the stored step held the boot line and no panel. It stays in the output
+  for a build that renders it. The hooks guide's `metadata.user_markdown` is not a field in either engine, and agy
+  drops the whole hook over it. The one hook output a user does see, an injected `errorMessage`, would show the
+  panel as an error on every new conversation and make `agy -p` exit as failed, so it is not used (D89).
 
 ## Seen live (agy 1.5.13, 2026-11-20)
 
@@ -85,6 +87,8 @@ The desktop app (engine 2.33.0) reads the same files but is checked by hand: acc
 - **No compaction pin.** There is no compaction event to hook; the overlay tells the pilot what to read instead.
 - **No record reminder.** Antigravity's `Stop` hook either lets the agent stop or makes it continue; a reminder
   that keeps the loop running is exactly the blocking Stop hook the machine forbids.
+- **No panel on the owner's screen.** The pilot gets the boot line; the owner runs `plug status` (or asks the pilot
+  to) when he wants the panel, and the overlay has the pilot say PATTERN ORANGE out loud (D89).
 
 ## Switching it off, and checking it is on
 

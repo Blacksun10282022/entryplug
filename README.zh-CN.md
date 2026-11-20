@@ -126,7 +126,7 @@ RULES.md。不要跑 plug init。
     "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
-`--emit` 把面板显示在主人的屏幕上（`systemMessage`），只把一行判定作为 `additionalContext` 递给驾驶员（D74）。`AGENTS.md` 则叫 Codex 式的驾驶员一上来先跑 `plug status`。Antigravity 的 SessionStart 有它自己的格式，所以它的插件调用 `status --emit antigravity`：面板放在这条消息的 `renderInfo.markdown` 里——给主人看的，从不发给模型（App 里显不显示要手测）——判定那一行作为注入的系统消息交给驾驶员（D89）。
+`--emit` 把面板显示在主人的屏幕上（`systemMessage`），只把一行判定作为 `additionalContext` 递给驾驶员（D74）。`AGENTS.md` 则叫 Codex 式的驾驶员一上来先跑 `plug status`。Antigravity 的 SessionStart 有它自己的格式，所以它的插件调用 `status --emit antigravity`：判定那一行作为注入的系统消息交给驾驶员；面板放在这条消息的 `renderInfo.markdown` 里，但 App 和 `agy` 都不显示（它们的界面不显示注入的系统消息），所以在这一侧主人想看面板就自己跑 `plug status`（D89）。
 
 记录可以带 `due: YYYY-MM-DD`，写明这条判断哪天结算。从那天起，面板多出一行 `[--] Records due`，报最早到期的那条和另有几条；这一行也随判定一起递给驾驶员，直到 `outcome` 填上。它是主人的待办，不是哪一层坏了：不计入同步率，也从不让判定变橙（D86）。
 

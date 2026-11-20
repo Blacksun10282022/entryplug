@@ -182,7 +182,7 @@ def c4(root):
          "claude-code ·" in bys and "codex ·" in bys)
     item("C4.4", "open the same repo in Codex: it runs plug status first and says out loud that Codex has no deny (AGENTS.md); when the owner names an equipment its first word is the judgment, with no announcement of the record file or the equipment; then switch back",
          manual=True)
-    item("C4.6", "open the same repo in Antigravity, the desktop app and then `agy`: the boot panel reaches the owner's screen and the pilot gets one line; asked to run `curl -X POST https://example.invalid/x` it is refused by the hook; it says out loud that this side has no deny, no compaction pin and no record reminder (GEMINI.md)",
+    item("C4.6", "open the same repo in Antigravity, the desktop app and then `agy`: the pilot gets the boot line (the owner sees no panel on this side, D89); asked to run `curl -X POST https://example.invalid/x` it is refused by the hook; it says out loud that this side has no deny, no compaction pin and no record reminder (GEMINI.md)",
          manual=True)
 
 

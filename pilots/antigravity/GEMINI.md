@@ -8,7 +8,7 @@ You are the Antigravity pilot. AGENTS.md is your map: where it says Codex it mea
 
 ## What the machine does for you here
 
-- Boot: a SessionStart hook runs `plug status` once per conversation. The panel goes to the owner's screen and you get one boot line; if it says PATTERN ORANGE, tell the owner before you start working.
+- Boot: a SessionStart hook runs `plug status` once per conversation and hands you one boot line. The owner does not see the panel on this side, so if the line says PATTERN ORANGE, tell him before you start working and name the layer; if he asks for the panel, run `plug status` and show it.
 - Search: the `search` tool comes from the workspace plugin `.agents/plugins/entryplug/`, whose server Antigravity names `entryplug_entryplug` (you reach it through `call_mcp_tool`, or as `mcp_entryplug_entryplug_search`). Same arguments and same caveats as AGENTS.md gives.
 - Equipment: the manuals are the mirror in `.agents/skills/<equipment>/SKILL.md`. One whose frontmatter says `disable-model-invocation: true` is the owner's to call (`/<equipment>`); never pick it up yourself.
 - Sortie lock: a PreToolUse hook in the same plugin returns a deny decision for the listed outward commands, and the call does not run. Same tripwire, same blind spots as AGENTS.md describes.
