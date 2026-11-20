@@ -4,17 +4,17 @@
 
 entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出发工作，却从不改写它。三种文件形状，一个只读的搜索接口，两道由机器强制执行的封锁，一个自检。它不做判断，不做编排，也不会自己学习。随附一件孙子示例装备，所以验收脚本和一个可复现的基准测试都能在五分钟内跑完。这是我自己在用的东西。它不是一个通用产品。
 
-*entryplug 是任何驾驶员（Claude Code 或 Codex）插入某个人的**素体**（规则、飞行记录、事实）、用那个人的**装备**（工具）作战时所插的那根插栓。主人从不驾驶；驾驶员从不改素体。这个模式叫**素体与装备**。*
+*entryplug 是任何驾驶员（Claude Code、Codex 或 Antigravity）插入某个人的**素体**（规则、飞行记录、事实）、用那个人的**装备**（工具）作战时所插的那根插栓。主人从不驾驶；驾驶员从不改素体。这个模式叫**素体与装备**。*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-zh-dark.svg">
-  <img src="docs/architecture-zh-light.svg" width="100%" alt="架构：驾驶员（Claude Code 或 Codex）向机器查询；机器是只读的索引与搜索，读取素体（规则、飞行记录、事实）和装备（说明书与字典）。直接改规则会被暴走封锁（deny + pre-commit）拦下。记录和改装申请交给主人，只有主人批准并写入。任何对外的动作都会被出击封锁（一个钩子）拦下。">
+  <img src="docs/architecture-zh-light.svg" width="100%" alt="架构：驾驶员（Claude Code、Codex 或 Antigravity）向机器查询；机器是只读的索引与搜索，读取素体（规则、飞行记录、事实）和装备（说明书与字典）。直接改规则会被暴走封锁（deny + pre-commit）拦下。记录和改装申请交给主人，只有主人批准并写入。任何对外的动作都会被出击封锁（一个钩子）拦下。">
 </picture>
 
 有三样东西被衡量，用三种不同的方法，从不并成一个数：
 
 - 检索跑在一个**公开黄金集**上，50 个用例，谁都能重跑：recall@10 是 0.98（中文 0.96，英文 1.00）。
-- 两道封锁通过**验收脚本**：24 项自动跑，另有 4 项在实机驾驶员里人工验证。
+- 两道封锁通过**验收脚本**：25 项自动跑，另有 5 项在实机驾驶员里人工验证。
 - 一个**私有盲测**跑在主人自己的处境上，以哈希登记：盲选在全部六个处境都选了带装备的那份，对四个不同的驾驶员各自如此（95% 区间 0.61 到 1.00）。
 
 ## 它做什么（全都在机器里；内容从不在这儿）
@@ -24,16 +24,16 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 | `plug index` | 遍历内容仓，校验形状，切块，再分词（jieba 词加中日韩二元组）写进**一张 FTS5 表**；按文件哈希增量；待批的改装申请只按它的理由入索引，目标被排除的整份不入（D84）；生成人类可读的 `index.md` 和每件装备的 `playbooks/INDEX.md`，并把说明书镜像到各驾驶员的 skills 目录 |
 | `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索（长的中文句子保留短词：每个单字词前后的二元组也一并去搜，D85），轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活。走 MCP 时它从不重建，所以读就真的只是读；命令行仍会在作答前把过期索引重建一遍（D76），`--no-index` 关掉这个动作。两种情况下，索引过期都会在结果最前面多出一行 `WARNING index stale; run plug index — N file(s) newer than the index built …`，写明落后多少（2026-09-07 审计 X-04；D83），`plug status` 的索引那一层也报 [NG] |
 | `plug status` | 开机自检。每一层一行（索引、素体、deny + pre-commit、暴走封锁、出击封锁、装备舱、`.plug-off`），有记录过了自己写的 `due` 日还没填结果时再多一行（只是提示，不变橙；D86），然后是一个同步率和一句判定。只有索引层自身不可用时才以非零退出 |
-| `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；记录过了自己写的结算日（`due: YYYY-MM-DD`）还没填结果，报一条 `due` WARNING（没到那天不报，也不再报 30 天的 `outcome` WARNING；D86）；一页报告加上同步率。从不给总分。`--contact claude-code\|codex` 跑四步的首次接触冒烟测试 |
+| `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；记录过了自己写的结算日（`due: YYYY-MM-DD`）还没填结果，报一条 `due` WARNING（没到那天不报，也不再报 30 天的 `outcome` WARNING；D86）；一页报告加上同步率。从不给总分。`--contact claude-code\|codex\|antigravity` 跑四步的首次接触冒烟测试 |
 | `plug apply` | 批准一条改装申请：校验 base 短哈希，新增 / 替换 / 退役，体检不新增 ERROR（库里原有的只计数、不拦），然后 git 提交（trailer 里带提案 sha）。base 对不上就直接拒绝，从不悄悄覆盖。**仅限主人**：在 agent 环境里运行它会拒绝，并告诉主人怎么自己跑 |
 | `plug eval` | 黄金集 recall@10；中文查询召回为零是一个 ERROR |
-| `plug init --pilot claude-code\|codex\|both` | 把闸门和驾驶员外壳装进一个内容仓：pre-commit 钩子、`.claude/settings.json` 的 deny 规则和钩子（合并，从不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md 地图（仅在缺失时）、说明书镜像、`.codex/hooks.json` 和 `.codex/config.toml`、`work/` 和 `workshop/` 区，全部用真实绝对路径；幂等，并把对每个文件做了什么都打印出来。`--link-skills` 还会把说明书装到用户级 |
+| `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | 把闸门和驾驶员外壳装进一个内容仓：pre-commit 钩子、`.claude/settings.json` 的 deny 规则和钩子（合并，从不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md / GEMINI.md 地图（仅在缺失时）、说明书镜像、`.codex/hooks.json` 和 `.codex/config.toml`、Antigravity 的工作区插件 `.agents/plugins/entryplug/`（MCP 服务器加钩子，它的桌面 app 和 `agy` 命令行共用这一套）、`work/` 和 `workshop/` 区，全部用真实绝对路径；幂等，并把对每个文件做了什么都打印出来。`both` 是 Claude Code 加 Codex，`all` 再加上 Antigravity。`--link-skills` 还会把说明书装到用户级 |
 
 两条禁令由 `gates/` 强制执行，不是靠提示词。
 
 **暴走封锁**（不要改规则或装备，不要造新装备；改成写一条改装申请）是一个 git pre-commit 钩子，加上 Claude Code 的 deny 规则。要知道 deny 那一半值多少：规则住在 `<content-repo>/.claude/settings.json` 里，只约束**项目根就是这个仓**的会话。一个从别处工作的 agent，另一个项目、一个机器仓、或一个临时目录，改这些文件时毫无阻拦，只有 pre-commit 拦得住结果落地。所以 pre-commit 是硬的那层，deny 是客气的那层。它的保护策略读自 `git show HEAD:plug.yaml`，所以在工作区把 `unprotected:` 放宽、又不把这份配置暂存，什么也换不来（2026-09-07 审计 X-01）；HEAD 里没有 plug.yaml 时它退回工作区，并在 stderr 上说一声。硬不等于密不透风：`--no-verify` 和 `KB_APPROVE=1` 是两个有记录在案的绕过方式，都会留下痕迹，也都归主人用。
 
-**出击封锁**（不以主人的名义送出任何东西；先问）是一个 PreToolUse 钩子，一份 Claude Code 和 Codex 共用的名单。它是常见对外写命令的绊线，不是沙箱：读放行（不带写方法的 curl/wget、WebFetch、读邮件），名单上的写形式拒绝（带写方法或上传参数的 curl/wget、PowerShell 的 -Method Post/-Body、Python 的 requests.post/httpx/smtplib、ssh/scp/sendmail、git push、gh、Artifact、MCP 的 send/reply/forward/submit/pay/publish），名单外的它看不见：任意代码的网络写入、浏览器点击（2026-09-07 审计 X-02）。决定是一个退出码为 0 的进程在 stdout 上打出的一行 JSON：`hookSpecificOutput.permissionDecision: "deny"`，配一个非空的 `permissionDecisionReason`，在每个驾驶员上都实机验证过（D65）。钩子接到了每个能跑命令或对外发布的工具：Bash、PowerShell、WebFetch、Artifact 和所有 MCP 工具。Codex 自己的 `approval_policy` 和 `sandbox_mode` 叠在上面当第二层；`plug check --contact codex` 会把两者都打出来，让你看清还有什么挡着或没挡着。此外还有一个压缩固定项和一个 Stop 钩子记录提醒，都是提醒级。
+**出击封锁**（不以主人的名义送出任何东西；先问）是一个 PreToolUse 钩子，一份 Claude Code、Codex 和 Antigravity 共用的名单。它是常见对外写命令的绊线，不是沙箱：读放行（不带写方法的 curl/wget、WebFetch、读邮件），名单上的写形式拒绝（带写方法或上传参数的 curl/wget、PowerShell 的 -Method Post/-Body、Python 的 requests.post/httpx/smtplib、ssh/scp/sendmail、git push、gh、Artifact、MCP 的 send/reply/forward/submit/pay/publish），名单外的它看不见：任意代码的网络写入、浏览器点击（2026-09-07 审计 X-02）。决定是一个退出码为 0 的进程在 stdout 上打出的一行 JSON：`hookSpecificOutput.permissionDecision: "deny"`，配一个非空的 `permissionDecisionReason`，在每个驾驶员上都实机验证过（D65）。钩子接到了每个能跑命令或对外发布的工具：Bash、PowerShell、WebFetch、Artifact 和所有 MCP 工具。Codex 自己的 `approval_policy` 和 `sandbox_mode` 叠在上面当第二层；`plug check --contact codex` 会把两者都打出来，让你看清还有什么挡着或没挡着。Antigravity 说的是它自己的钩子协议：同一个脚本凭 payload 的形状认出它，用 `{"decision": "deny", "reason": …}` 回答；钩子看得见它进 shell 的两扇门（`run_command`、`send_command_input`，名单里两个都要写上）和每一次 MCP 调用——改名成 `mcp__…`，于是给另外两个驾驶员写的那条 MCP 规则照样适用（D88）。此外还有一个压缩固定项和一个 Stop 钩子记录提醒，都是提醒级；Antigravity 这两样都没有，也没有能随仓库走的 deny 层，这是有意的决定（D90）。
 
 ## 为什么会有它
 
@@ -63,11 +63,11 @@ python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FA
 
 `plug search` 默认覆盖字典、打法和记录；语料要加 `--scope corpus`（MCP 上是 `scope=corpus`）。没有命中时，末行会说搜的是哪个范围、索引是什么时候建的；没有索引时它会明说，并以 1 退出。
 
-上面跑的是示例上的机器。要让它从你自己的判断出发工作，就造你自己的素体（下一节）。集成细节在 `pilots/claude-code/` 和 `pilots/codex/`，闸门在 `gates/README.md`，形状在 `docs/SHAPES.md`，一路上做过的每个决定在 `docs/DECISIONS.md`。
+上面跑的是示例上的机器。要让它从你自己的判断出发工作，就造你自己的素体（下一节）。集成细节在 `pilots/claude-code/`、`pilots/codex/` 和 `pilots/antigravity/`，闸门在 `gates/README.md`，形状在 `docs/SHAPES.md`，一路上做过的每个决定在 `docs/DECISIONS.md`。
 
 ## 造你自己的素体
 
-entryplug 是机器：克隆一次就好，你自己的东西不要放进去。你的素体是另一个属于你自己的 git 仓，结构照 `example-tool/`。**在那个仓里工作**：Claude Code 或 Codex 要在那里打开，不要在 `entryplug/` 里打开，因为 deny 规则只约束项目根就是内容仓的会话。
+entryplug 是机器：克隆一次就好，你自己的东西不要放进去。你的素体是另一个属于你自己的 git 仓，结构照 `example-tool/`。**在那个仓里工作**：Claude Code、Codex 或 Antigravity 要在那里打开，不要在 `entryplug/` 里打开，因为 deny 规则只约束项目根就是内容仓的会话，而 Antigravity 只会从它启动的位置往上找插件。
 
 ```
 mkdir my-unit && cd my-unit && git init
@@ -75,11 +75,11 @@ cp <entryplug>/example-tool/plug.yaml .     # 然后把 tools: 改成 []、设�
 mkdir -p self/facts self/records proposals/pending
 # 写好 self/RULES.md、self/style.md 和 self/facts/ 里的一个文件（见下），然后：
 git add -A && git commit -m "Base: first rules"
-plug init --pilot claude-code               # 或 codex、both：装上两道封锁
+plug init --pilot claude-code               # 或 codex、antigravity、both（前两个）、all：装上两道封锁
 git add -A && git commit -m "plug init"
 plug index && plug status                   # 面板最后一行应是 SYNC RATE 100.0%
 plug check --contact claude-code            # 四步全 OK
-claude                                      # 或 codex，永远从这个文件夹里启动
+claude                                      # 或 codex，或在这个文件夹上开 agy / Antigravity app；永远从这里启动
 ```
 
 顺序要紧。`plug.yaml` 定好、第一批规则写好，都要在 `plug init` **之前**。装上之后，`self/RULES.md`、`self/facts/`、`plug.yaml` 和登记在里面的每件装备就锁上了：驾驶员改不了，碰到它们的提交会被拒。从那以后，改动就是驾驶员写进 `proposals/pending/` 的改装申请，由你用 `plug apply` 批准（见[主人的两行命令](#主人的两行命令)）。复制来的 `outbound:` 那段要留着：没有它，出击封锁就没有东西可拦。
@@ -108,7 +108,7 @@ RULES.md。不要跑 plug init。
 
 ### 机器变了之后，更新一个已装好的仓
 
-`plug init` 是幂等的，但它只在地图（`CLAUDE.md` / `AGENTS.md`）缺失时才写，因为它们是留着装好之后给人改的。值得知道的后果：这里改正了一个模板，早先装好的仓仍留着旧文字。生成的文件（钩子、deny 规则、`.mcp.json`、说明书镜像）会因重跑 `plug init` 而刷新；地图不会。所以升级机器之后，重跑 `plug init --pilot both`，再把你的地图和 `pilots/*/CLAUDE.md`、`pilots/codex/AGENTS.md` 做 diff，把变了的部分抄过去。`plug check` 会机械地抓出那一条会误导驾驶员认识自己边界的过期说法（代码 `map_claim`）；其余的都靠 diff。
+`plug init` 是幂等的，但它只在地图（`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`）缺失时才写，因为它们是留着装好之后给人改的。值得知道的后果：这里改正了一个模板，早先装好的仓仍留着旧文字。生成的文件（钩子、deny 规则、`.mcp.json`、说明书镜像）会因重跑 `plug init` 而刷新；地图不会。所以升级机器之后，按你用的驾驶员重跑 `plug init`（三个都用就是 `--pilot all`），再把你的地图和 `pilots/claude-code/CLAUDE.md`、`pilots/codex/AGENTS.md`、`pilots/antigravity/GEMINI.md` 做 diff，把变了的部分抄过去。`plug check` 会机械地抓出那一条会误导驾驶员认识自己边界的过期说法（代码 `map_claim`）；其余的都靠 diff。
 
 ## 开机面板
 
@@ -126,7 +126,7 @@ RULES.md。不要跑 plug init。
     "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
-`--emit` 把面板显示在主人的屏幕上（`systemMessage`），只把一行判定作为 `additionalContext` 递给驾驶员（D74）。`AGENTS.md` 则叫 Codex 式的驾驶员一上来先跑 `plug status`。
+`--emit` 把面板显示在主人的屏幕上（`systemMessage`），只把一行判定作为 `additionalContext` 递给驾驶员（D74）。`AGENTS.md` 则叫 Codex 式的驾驶员一上来先跑 `plug status`。Antigravity 的 SessionStart 有它自己的格式，所以它的插件调用 `status --emit antigravity`：面板放在这条消息的 `renderInfo.markdown` 里——Antigravity 把它显示给主人，从不发给模型——判定那一行作为注入的系统消息交给驾驶员（D89）。
 
 记录可以带 `due: YYYY-MM-DD`，写明这条判断哪天结算。从那天起，面板多出一行 `[--] Records due`，报最早到期的那条和另有几条；这一行也随判定一起递给驾驶员，直到 `outcome` 填上。它是主人的待办，不是哪一层坏了：不计入同步率，也从不让判定变橙（D86）。
 
@@ -205,8 +205,8 @@ RULES.md。不要跑 plug init。
 
 | 指标 | 结果 | 复现 | 截至 |
 |---|---|---|---|
-| 两道封锁（验收） | 24 项自动 PASS，0 FAIL，4 项人工 | `python tests/acceptance.py` | 2026-11-12 |
-| 命令与闸门（单元测试） | 153 通过 | `python -m pytest` | 2026-11-12 |
+| 两道封锁（验收） | 25 项自动 PASS，0 FAIL，5 项人工 | `python tests/acceptance.py` | 2026-11-20 |
+| 命令与闸门（单元测试） | 162 通过 | `python -m pytest` | 2026-11-20 |
 | 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-12 |
 
 有一个测试（`tests/test_eval_goldset.py`）把召回压在 0.93 的下限，并断言中文召回永不为零。
@@ -260,19 +260,21 @@ look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
 plug --root <content-repo> init --pilot claude-code --link-skills
 ```
 
-那会把每个 `tools/*/SKILL.md` 复制进用户级的 skills 目录（`~/.claude/skills/<equipment>/`，Codex 是 `~/.agents/skills/<equipment>/`；在 plug.yaml 里用 `pilots.<name>.user_skills` 覆盖），并把内容仓的绝对路径盖进去。这是一个手动触发，它不注册任何用户级 MCP 服务器：在内容仓之外，你拿到的是说明书，不是素体。
+那会把每个 `tools/*/SKILL.md` 复制进用户级的 skills 目录（`~/.claude/skills/<equipment>/`，Codex 是 `~/.agents/skills/<equipment>/`，Antigravity 是 `~/.gemini/config/skills/<equipment>/`；在 plug.yaml 里用 `pilots.<name>.user_skills` 覆盖），并把内容仓的绝对路径盖进去。这是一个手动触发，它不注册任何用户级 MCP 服务器：在内容仓之外，你拿到的是说明书，不是素体。
 
 - 产物默认去 `<content-repo>/work/<equipment>/`。如果想在你工作的地方留一份，就写那份副本，并在里面记下主副本的路径。
 - 素体在外面不加载，说明书也这么讲：装备会如实说明这一点，而不是去编主人的规则。
-- 你不想让模型自己去够的装备，就在它 SKILL.md 的 frontmatter 里加 `disable-model-invocation: true`；这会一路带进用户级副本，也带进 Codex 的 `openai.yaml`。
+- 你不想让模型自己去够的装备，就在它 SKILL.md 的 frontmatter 里加 `disable-model-invocation: true`；这会一路带进用户级副本，也带进 Codex 的 `openai.yaml`；Antigravity 自己就读这一行（主人用 `/<equipment>` 叫它）。
 
 ## 布局
 
 ```
 entryplug/    cli · config · shapes · index · search · mcp · check · numbers · report · contact · status · apply · eval · init
+              · antigravity (what the machine knows about that pilot)
               (one verb per file, <=250 lines each, no classes and no frameworks)
 gates/        precommit · outbound · precompact · stop + the hook template
 pilots/       claude-code/ (plugin shell · map · deny template) · codex/ (AGENTS.md · hooks · junction notes)
+              · antigravity/ (GEMINI.md overlay · the workspace plugin and its hook contract)
 example-tool/ the Sunzi example content repo (corpus public domain, everything else CC0)
 tests/        one group per verb, per gate, per kind of ERROR, plus no-leak and the acceptance script
 bench/        the benchmark input format · a public mini gold set · the private benchmark registry

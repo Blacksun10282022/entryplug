@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
 <title id="title">entryplug architecture: Base and Equipment</title>
-<desc id="desc">The pilot (Claude Code or Codex) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny rules plus a pre-commit hook). The pilot writes records and refit requests instead; they go to the owner, the only one who approves and writes into the Base and Equipment. Anything outward is stopped by the sortie lock, a hook.</desc>
+<desc id="desc">The pilot (Claude Code, Codex or Antigravity) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny rules plus a pre-commit hook). The pilot writes records and refit requests instead; they go to the owner, the only one who approves and writes into the Base and Equipment. Anything outward is stopped by the sortie lock, a hook.</desc>
 <style>
 .title{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;font-size:26px;font-weight:700;letter-spacing:-0.6px}
 .subt{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;font-size:18.5px}
@@ -106,7 +106,7 @@
 <rect x="64" y="217" width="18" height="15" rx="3" fill="none" stroke="#a371f7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M68,222 l3,2.5 l-3,2.5 M73,228 h5" fill="none" stroke="#a371f7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="92" y="230" class="kick" fill="#a371f7">PILOT</text>
 <circle cx="242" cy="225" r="4" fill="#3fb950" class="breathe"/>
-<text x="64" y="262" class="node b" fill="#e6edf3">Claude Code · Codex</text>
+<text x="64" y="262" class="node b" style="font-size:13px" textLength="182" lengthAdjust="spacingAndGlyphs" fill="#e6edf3">Claude Code · Codex · Antigravity</text>
 <text x="64" y="282" class="small" fill="#8b949e">carries the equipment</text>
 <polygon class="ringed" points="344,234 370,188 574,188 600,234 574,280 370,280" fill="none" stroke="#3fb950" stroke-width="1.5" opacity="0" style="animation:r12 12s ease-out infinite both"/>
 <polygon points="344,234 370,188 574,188 600,234 574,280 370,280" fill="#0d1117" stroke="#3d444d" stroke-width="1.4"/>

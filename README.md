@@ -4,14 +4,14 @@ English | [简体中文](README.zh-CN.md)
 
 ## In plain words
 
-EntryPlug is a governance layer for AI coding agents (Claude Code and Codex): a small CLI plus a read-only MCP server. One person writes down their rules, facts and past decisions; the agent searches them over MCP and works from them. EntryPlug's job is to keep the agent from changing them, and from sending anything out in that person's name without asking first.
+EntryPlug is a governance layer for AI coding agents (Claude Code, Codex and Antigravity): a small CLI plus a read-only MCP server. One person writes down their rules, facts and past decisions; the agent searches them over MCP and works from them. EntryPlug's job is to keep the agent from changing them, and from sending anything out in that person's name without asking first.
 
 Both limits are enforced in code, not in the prompt:
 
 - **Protected files.** A Git pre-commit hook plus Claude Code deny rules refuse changes to the person's rules, facts and approved tools. The agent writes a change request instead; only the owner can apply it.
-- **Outbound actions.** A PreToolUse hook refuses the common outbound write commands (`git push`, `gh`, HTTP POST, mail, publish and send tools), verified live in both Claude Code and Codex. It is a tripwire, not a sandbox: code outside its list can still reach the network.
+- **Outbound actions.** A PreToolUse hook refuses the common outbound write commands (`git push`, `gh`, HTTP POST, mail, publish and send tools), verified live in Claude Code, Codex and Antigravity's `agy` CLI. It is a tripwire, not a sandbox: code outside its list can still reach the network.
 
-Measured (details in [How it is measured](#how-it-is-measured)): retrieval recall@10 is 0.98 on a public 50-case gold set; the locks pass an acceptance script (24 automated checks, 4 verified by hand in live sessions); 134 unit tests. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
+Measured (details in [How it is measured](#how-it-is-measured)): retrieval recall@10 is 0.98 on a public 50-case gold set; the locks pass an acceptance script (25 automated checks, 5 verified by hand in live sessions); 162 unit tests. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
 
 The rest of this README uses the project's own vocabulary: the agent is the **pilot**, the person's notes are the **Base**, their tools are **Equipment**, and the two limits are the **berserk lock** and the **sortie lock**.
 
@@ -19,11 +19,11 @@ The rest of this README uses the project's own vocabulary: the agent is the **pi
 
 entryplug is the plug that lets a coding agent work from one person's written judgment without ever rewriting it. Three file shapes, one read-only search interface, two machine-enforced locks, one self-check. It does not judge, it does not orchestrate, and it does not learn on its own. A Sunzi example equipment ships with it, so the acceptance script and a reproducible benchmark both run in five minutes. This is something I use myself. It is not a general-purpose product.
 
-*Entryplug is the plug any pilot (Claude Code or Codex) inserts into one person's **Base** (rules, flight log, facts) to fight with that person's **Equipment** (tools). The owner never pilots; the pilot never edits the Base. The pattern is called **Base and Equipment**.*
+*Entryplug is the plug any pilot (Claude Code, Codex or Antigravity) inserts into one person's **Base** (rules, flight log, facts) to fight with that person's **Equipment** (tools). The owner never pilots; the pilot never edits the Base. The pattern is called **Base and Equipment**.*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-en-dark.svg">
-  <img src="docs/architecture-en-light.svg" width="100%" alt="Architecture: the pilot (Claude Code or Codex) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny + pre-commit). Records and refit requests go to the owner, the only one who approves and writes. Anything outward is stopped by the sortie lock, a hook.">
+  <img src="docs/architecture-en-light.svg" width="100%" alt="Architecture: the pilot (Claude Code, Codex or Antigravity) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny + pre-commit). Records and refit requests go to the owner, the only one who approves and writes. Anything outward is stopped by the sortie lock, a hook.">
 </picture>
 
 Three things are measured, three separate ways, and never mixed into one number:
@@ -39,16 +39,16 @@ Three things are measured, three separate ways, and never mixed into one number:
 | `plug index` | walks the content repo, validates shapes, chunks, then tokenises (jieba words plus CJK bigrams) into **one FTS5 table**; incremental by file hash; a pending refit request is indexed from its reasons only, and not at all when its target is excluded (D84); writes the human-readable `index.md` and each equipment's `playbooks/INDEX.md`, and mirrors the manuals into the pilots' skills directories |
 | `plug search` / MCP `search` | the only query interface, read-only: one or more queries, alias expansion, full text (a long Chinese sentence keeps its short terms: the bigrams around every one-character word are searched too, D85), round-robin merge, grouped by document, compact lines (id · source · file#Lstart-Lend · kind · excerpt). **No reranking**: reading the window and weighing it is the pilot's job. Over MCP it never rebuilds, so a read really is a read; the CLI still rebuilds a stale index before answering (D76) and `--no-index` turns that off. Either way a stale index puts one `WARNING index stale; run plug index — N file(s) newer than the index built …` line ahead of the results (audit 2026-09-07, X-04; D83), and `plug status` shows the index layer [NG] |
 | `plug status` | the boot self-check. One line per layer (index, Base, deny + pre-commit, berserk lock, sortie lock, equipment bay, `.plug-off`), one more when records are past their `due` day with no outcome (informational, never orange; D86), then a sync rate and a verdict. Exits nonzero only when the index layer itself is unusable |
-| `plug check` | the check-up: ERROR / WARNING one line at a time with the time each was verified, the header self-check (shape version · index freshness · when each hook last fired · mounted equipment), each equipment's own `checks/`, refit requests unapproved for 30 days moved to rejected/, a `due` WARNING for a record past the day it set for itself (`due: YYYY-MM-DD`; before that day there is none, and it replaces the 30-day `outcome` WARNING; D86), one page of report plus the sync rate. Never a total score. `--contact claude-code\|codex` runs the four-step first-contact smoke test |
+| `plug check` | the check-up: ERROR / WARNING one line at a time with the time each was verified, the header self-check (shape version · index freshness · when each hook last fired · mounted equipment), each equipment's own `checks/`, refit requests unapproved for 30 days moved to rejected/, a `due` WARNING for a record past the day it set for itself (`due: YYYY-MM-DD`; before that day there is none, and it replaces the 30-day `outcome` WARNING; D86), one page of report plus the sync rate. Never a total score. `--contact claude-code\|codex\|antigravity` runs the four-step first-contact smoke test |
 | `plug apply` | approves one refit request: verifies the base short hash, adds / replaces / retires, checks that the change adds no new ERROR (ones already in the repo are counted, not blocking), then git commits (the proposal sha in a trailer). A base mismatch is refused outright, never silently overwritten. **Owner only**: run inside an agent environment, it refuses and tells the owner how to run it himself |
 | `plug eval` | gold-set recall@10; zero recall on Chinese queries is an ERROR |
-| `plug init --pilot claude-code\|codex\|both` | installs the gates and the pilot shells into a content repo: the pre-commit hook, `.claude/settings.json`'s deny rules and hooks (merged, never overwritten), `.mcp.json`, the CLAUDE.md / AGENTS.md map (only when absent), the manual mirror, `.codex/hooks.json` and `.codex/config.toml`, the `work/` and `workshop/` zones, all with real absolute paths; idempotent, and it prints what it did to every file. `--link-skills` also installs the manuals user-level |
+| `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | installs the gates and the pilot shells into a content repo: the pre-commit hook, `.claude/settings.json`'s deny rules and hooks (merged, never overwritten), `.mcp.json`, the CLAUDE.md / AGENTS.md / GEMINI.md maps (only when absent), the manual mirror, `.codex/hooks.json` and `.codex/config.toml`, Antigravity's workspace plugin `.agents/plugins/entryplug/` (MCP server and hooks, one wiring for its desktop app and its `agy` CLI), the `work/` and `workshop/` zones, all with real absolute paths; idempotent, and it prints what it did to every file. `both` is Claude Code and Codex, `all` adds Antigravity. `--link-skills` also installs the manuals user-level |
 
 Two prohibitions are enforced by `gates/`, not by prompting.
 
 The **berserk lock** (do not change the rules or the equipment, do not build new equipment; write a refit request instead) is a git pre-commit hook plus Claude Code deny rules. Know what the deny half is worth: the rules live in `<content-repo>/.claude/settings.json` and bind a session whose **project root is that repo**. An agent working from somewhere else, another project or a machine repo or a scratch directory, edits those files with nothing in its way, and only pre-commit stops the result from landing. That is why pre-commit is the hard layer and deny is the polite one. It reads the protection policy from `git show HEAD:plug.yaml`, so widening `unprotected:` in the working tree and leaving it unstaged buys nothing (audit 2026-09-07, X-01); with no plug.yaml in HEAD it falls back to the working tree and says so on stderr. Hard is not airtight: `--no-verify` and `KB_APPROVE=1` are the two documented ways round it, both leave a trace, and both are the owner's to use.
 
-The **sortie lock** (nothing goes out in the owner's name; ask first) is a PreToolUse hook, one list shared by Claude Code and Codex. It is a tripwire for the common outbound write commands, not a sandbox: reads pass (curl/wget without a write method, WebFetch, reading mail), the listed write forms are refused (curl/wget with a write method or upload, PowerShell -Method Post/-Body, Python requests.post/httpx/smtplib, ssh/scp/sendmail, git push, gh, Artifact, MCP send/reply/forward/submit/pay/publish), and anything outside the list is not seen by it: arbitrary code that writes to the network, and browser clicks (audit 2026-09-07, X-02). The decision is one JSON line on stdout from a process that exits 0: `hookSpecificOutput.permissionDecision: "deny"` with a non-empty `permissionDecisionReason`, verified live on each pilot (D65). The hook is wired to every tool that can run a command or publish: Bash, PowerShell, WebFetch, Artifact and all MCP tools. Codex's own `approval_policy` and `sandbox_mode` sit on top as a second layer; `plug check --contact codex` prints both so you can see what else is or is not in the way. Plus a compaction pin and a Stop-hook record reminder, both reminder-level.
+The **sortie lock** (nothing goes out in the owner's name; ask first) is a PreToolUse hook, one list shared by Claude Code, Codex and Antigravity. It is a tripwire for the common outbound write commands, not a sandbox: reads pass (curl/wget without a write method, WebFetch, reading mail), the listed write forms are refused (curl/wget with a write method or upload, PowerShell -Method Post/-Body, Python requests.post/httpx/smtplib, ssh/scp/sendmail, git push, gh, Artifact, MCP send/reply/forward/submit/pay/publish), and anything outside the list is not seen by it: arbitrary code that writes to the network, and browser clicks (audit 2026-09-07, X-02). The decision is one JSON line on stdout from a process that exits 0: `hookSpecificOutput.permissionDecision: "deny"` with a non-empty `permissionDecisionReason`, verified live on each pilot (D65). The hook is wired to every tool that can run a command or publish: Bash, PowerShell, WebFetch, Artifact and all MCP tools. Codex's own `approval_policy` and `sandbox_mode` sit on top as a second layer; `plug check --contact codex` prints both so you can see what else is or is not in the way. Antigravity speaks its own hook protocol: the same script recognises it by the payload's shape and answers `{"decision": "deny", "reason": …}`, the hook sees its two doors into a shell (`run_command`, `send_command_input`, both of which the list has to name) and every MCP call, renamed `mcp__…` so the MCP rule written for the other two applies (D88). Plus a compaction pin and a Stop-hook record reminder, both reminder-level; Antigravity has neither, and no deny layer a repo can carry, by decision (D90).
 
 ## Why this exists
 
@@ -78,11 +78,11 @@ python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FA
 
 `plug search` covers the dictionary, the playbooks and the records by default; the corpus needs `--scope corpus` (`scope=corpus` over MCP). With no hits the tail line says which scope was searched and when the index was built; with no index it says so and exits 1.
 
-That is the machine running on the example. To run it on your own judgment, build your own Base (next section). Integration details are in `pilots/claude-code/` and `pilots/codex/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`, and every call made along the way in `docs/DECISIONS.md`.
+That is the machine running on the example. To run it on your own judgment, build your own Base (next section). Integration details are in `pilots/claude-code/`, `pilots/codex/` and `pilots/antigravity/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`, and every call made along the way in `docs/DECISIONS.md`.
 
 ## Your own Base
 
-entryplug is the machine: clone it once and keep your own material out of it. Your Base is a separate git repository of your own, shaped like `example-tool/`. Work **from inside that repository**: open Claude Code or Codex there, not in `entryplug/`, because the deny rules only bind a session whose project root is the content repo.
+entryplug is the machine: clone it once and keep your own material out of it. Your Base is a separate git repository of your own, shaped like `example-tool/`. Work **from inside that repository**: open Claude Code, Codex or Antigravity there, not in `entryplug/`, because the deny rules only bind a session whose project root is the content repo, and Antigravity finds its plugin only by walking up from where it was started.
 
 ```
 mkdir my-unit && cd my-unit && git init
@@ -90,11 +90,11 @@ cp <entryplug>/example-tool/plug.yaml .     # then set tools: [] and your langua
 mkdir -p self/facts self/records proposals/pending
 # write self/RULES.md, self/style.md and one file in self/facts/ (see below), then:
 git add -A && git commit -m "Base: first rules"
-plug init --pilot claude-code               # or codex, or both: installs the two locks
+plug init --pilot claude-code               # or codex, antigravity, both (the first two) or all: installs the two locks
 git add -A && git commit -m "plug init"
 plug index && plug status                   # the panel should end with SYNC RATE 100.0%
 plug check --contact claude-code            # four steps, all OK
-claude                                      # or codex, always started from this folder
+claude                                      # or codex, or agy / the Antigravity app on this folder; always started here
 ```
 
 Order matters. Settle `plug.yaml` and write the first rules **before** `plug init`. After it, `self/RULES.md`, `self/facts/`, `plug.yaml` and every piece of equipment registered in it are locked: the pilot cannot edit them, and a commit that touches them is refused. From then on a change is a refit request the pilot writes into `proposals/pending/`, and you approve it with `plug apply` (see [The owner's two lines](#the-owners-two-lines)). Keep the `outbound:` block you copied: without it the sortie lock has nothing to match.
@@ -124,7 +124,7 @@ A Base the model wrote on its own holds the model's judgment, not yours; the loc
 
 ### Updating an install after the machine changes
 
-`plug init` is idempotent, but it writes the maps (`CLAUDE.md` / `AGENTS.md`) **only when they are absent**, because they are meant to be edited after install. The consequence worth knowing: when a template is corrected here, repos installed earlier keep the old text. Generated files (hooks, deny rules, `.mcp.json`, the manual mirror) are refreshed by re-running `plug init`; the maps are not. So after upgrading the machine, re-run `plug init --pilot both`, then diff your maps against `pilots/*/CLAUDE.md` and `pilots/codex/AGENTS.md` and copy over anything that changed. `plug check` mechanically catches the one stale claim that misleads a pilot about its own limits (code `map_claim`); everything else is on the diff.
+`plug init` is idempotent, but it writes the maps (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`) **only when they are absent**, because they are meant to be edited after install. The consequence worth knowing: when a template is corrected here, repos installed earlier keep the old text. Generated files (hooks, deny rules, `.mcp.json`, the manual mirror) are refreshed by re-running `plug init`; the maps are not. So after upgrading the machine, re-run `plug init` for the pilots you use (`--pilot all` for all three), then diff your maps against `pilots/claude-code/CLAUDE.md`, `pilots/codex/AGENTS.md` and `pilots/antigravity/GEMINI.md` and copy over anything that changed. `plug check` mechanically catches the one stale claim that misleads a pilot about its own limits (code `map_claim`); everything else is on the diff.
 
 ## Boot panel
 
@@ -142,7 +142,7 @@ The panel above is the Sunzi example equipment as it ships, before `plug init`. 
     "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
-`--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as `additionalContext` (D74). `AGENTS.md` tells Codex-style pilots to run `plug status` first thing instead.
+`--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as `additionalContext` (D74). `AGENTS.md` tells Codex-style pilots to run `plug status` first thing instead. Antigravity's SessionStart has its own shape, so its plugin calls `status --emit antigravity`: the panel travels as the message's `renderInfo.markdown`, which Antigravity shows the owner and never sends to the model, and the verdict line is the injected system message (D89).
 
 A record may carry `due: YYYY-MM-DD`, the day its judgment is to be settled. From that day the panel adds one `[--] Records due` line naming the oldest such record and how many more there are, and that line rides along with the pilot's verdict line until `outcome` is filled. It is a to-do for the owner, not a broken layer: it is not counted in the sync rate and never turns the verdict orange (D86).
 
@@ -221,8 +221,8 @@ Three things, three ways, never one number.
 
 | measure | result | reproduce | as of |
 |---|---|---|---|
-| the two locks (acceptance) | 24 automated PASS, 0 FAIL, 4 manual | `python tests/acceptance.py` | 2026-11-12 |
-| verbs and gates (unit tests) | 153 passed | `python -m pytest` | 2026-11-12 |
+| the two locks (acceptance) | 25 automated PASS, 0 FAIL, 5 manual | `python tests/acceptance.py` | 2026-11-20 |
+| verbs and gates (unit tests) | 162 passed | `python -m pytest` | 2026-11-20 |
 | gold-set recall@10 | 0.98 (Chinese 0.96, English 1.00), n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-12 |
 
 A test (`tests/test_eval_goldset.py`) holds the recall at a floor of 0.93 and asserts that Chinese recall is never zero.
@@ -276,19 +276,21 @@ You want one piece of equipment while working somewhere else entirely, another p
 plug --root <content-repo> init --pilot claude-code --link-skills
 ```
 
-That copies every `tools/*/SKILL.md` into the user-level skills directory (`~/.claude/skills/<equipment>/`, `~/.agents/skills/<equipment>/` for Codex; override with `pilots.<name>.user_skills` in plug.yaml), stamping in the content repo's absolute path. It is a manual trigger and it registers no user-level MCP server: outside the content repo you get the manual, not the Base.
+That copies every `tools/*/SKILL.md` into the user-level skills directory (`~/.claude/skills/<equipment>/`, `~/.agents/skills/<equipment>/` for Codex, `~/.gemini/config/skills/<equipment>/` for Antigravity; override with `pilots.<name>.user_skills` in plug.yaml), stamping in the content repo's absolute path. It is a manual trigger and it registers no user-level MCP server: outside the content repo you get the manual, not the Base.
 
 - Products default to `<content-repo>/work/<equipment>/`. If a copy is wanted where you are working, write the copy and note the master path in it.
 - The Base is not loaded out here, and the manual says so: the equipment states that instead of inventing the owner's rules.
-- Equipment you would rather the model never reached for on its own gets `disable-model-invocation: true` in its SKILL.md frontmatter; that rides along into the user-level copy and into Codex's `openai.yaml`.
+- Equipment you would rather the model never reached for on its own gets `disable-model-invocation: true` in its SKILL.md frontmatter; that rides along into the user-level copy and into Codex's `openai.yaml`, and Antigravity reads the same line itself (the owner calls it with `/<equipment>`).
 
 ## Layout
 
 ```
 entryplug/    cli · config · shapes · index · search · mcp · check · numbers · report · contact · status · apply · eval · init
+              · antigravity (what the machine knows about that pilot)
               (one verb per file, <=250 lines each, no classes and no frameworks)
 gates/        precommit · outbound · precompact · stop + the hook template
 pilots/       claude-code/ (plugin shell · map · deny template) · codex/ (AGENTS.md · hooks · junction notes)
+              · antigravity/ (GEMINI.md overlay · the workspace plugin and its hook contract)
 example-tool/ the Sunzi example content repo (corpus public domain, everything else CC0)
 tests/        one group per verb, per gate, per kind of ERROR, plus no-leak and the acceptance script
 bench/        the benchmark input format · a public mini gold set · the private benchmark registry
