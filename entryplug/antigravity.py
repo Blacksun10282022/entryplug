@@ -11,7 +11,9 @@
 # Note: the contract is Antigravity's own (builtin agy-customizations/docs/hooks.md, verified live — D88): a
 #       camelCase payload, the call in `toolCall {name, args}` with PascalCase args, a deny is
 #       {"decision": "deny", "reason": …} on stdout from a process that exits 0, matchers are anchored regexes on
-#       the tool name. Hook commands run under `cmd /c` on Windows with the plugin folder as cwd: bare words.
+#       the tool name. A hook runs as `cmd /d /s /c "<command>"` with the plugin folder as cwd; bare words, as for
+#       Codex. On agy 1.5.13 a hook that exits non-zero or prints anything but valid JSON fails the tool call (the
+#       guide says fail-open; this engine is not), so the gate prints nothing at all to let a call through.
 # Deps: stdlib json · os · re · pathlib.
 import json, os, re
 from pathlib import Path
@@ -71,7 +73,8 @@ def deny(reason):
 
 def boot(panel, line):
     """The SessionStart answer in Antigravity's shape, D74's split kept: the panel goes to the owner's screen as the
-    message's renderInfo.markdown, which the model never reads; the model gets the one boot line as the system
+    message's renderInfo.markdown, which the model never reads (agy -p does not print it; whether the app shows it
+    is checked by hand); the model gets the one boot line as the system
     message. Not metadata.user_markdown, which its own hooks guide names: neither engine has that field, and agy
     1.5.13 drops the whole hook with "cannot convert string to message" (D89)."""
     return {"injectSteps": [{"systemMessage": {"systemMessage": line, "renderInfo": {"markdown": "```\n%s\n```" % panel}}}]}

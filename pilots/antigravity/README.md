@@ -42,8 +42,13 @@ not read.
 
 - `hooks.json` maps a hook *name* to its events: `{"sortie-lock": {"PreToolUse": [{"matcher": …, "hooks": [handler]}]}}`.
   `SessionStart` takes a flat list of handlers. Handler: `{"type": "command", "command": "…", "timeout": 30}`.
-- The command runs under `cmd /c` on Windows (`sh -c` elsewhere), with the plugin folder as its working directory.
-  `plug init` writes bare, space-separated words, as for Codex, and warns when a path holds a space.
+- The command runs as `cmd /d /s /c "<command>"` on Windows (`sh -c` elsewhere), with the plugin folder as its
+  working directory, so it reads exactly as typed in cmd and quoted paths work too. `plug init` writes bare,
+  space-separated words, as for Codex, and warns when a path holds a space.
+- Allow by printing nothing. On agy 1.5.13 a hook that exits non-zero, or prints `{}`, `{"decision": ""}`, Claude's
+  `hookSpecificOutput` or anything that is not JSON, makes the tool call fail; the guide says hooks fail open, this
+  engine does not. `gates/outbound.py` prints only when it denies, so a gate that crashes stops shell commands on
+  this side instead of letting them through.
 - The payload is camelCase: `hookEventName`, `cwd` (the agent's), `workspacePaths`, `conversationId`,
   `transcriptPath`, and for a tool call `toolCall: {id, name, args}` with PascalCase arguments. A shell command is
   `CommandLine` of `run_command`, or `Input` of `send_command_input`. An MCP call is `call_mcp_tool`
@@ -53,8 +58,9 @@ not read.
   this protocol from the payload's own shape (only Antigravity sends `toolCall`) and answers in it (D88); it names
   an MCP call `mcp__<server>__<tool>`, as the other two pilots do, so one outbound list covers all three.
 - SessionStart answers `{"injectSteps": [{"systemMessage": {"systemMessage": <line>, "renderInfo": {"markdown": <panel>}}}]}`:
-  the model reads only `systemMessage`; `renderInfo.markdown` is shown to the owner and never sent to the model.
-  That is D74's split — the panel on the owner's screen, one boot line for the pilot. The hooks guide says
+  the model reads only `systemMessage` (seen live); `renderInfo.markdown` is meant for the owner's screen and never
+  reaches the model. `agy -p` does not print it, and whether the app shows it is part of the MANUAL check. That is
+  D74's split — the panel for the owner, one boot line for the pilot. The hooks guide says
   `metadata.user_markdown`; neither engine has that field, and agy drops the whole hook over it (D89).
 
 ## Seen live (agy 1.5.13, 2026-11-20)
@@ -66,6 +72,9 @@ an outward action … ask first" and did not run; `search` on the plugin's serve
 Chinese query. Also seen: `run_command` runs PowerShell on Windows; every command the agent runs carries
 `ANTIGRAVITY_AGENT`, which `plug apply` refuses like the other pilots' markers; MCP tools ask before their first use,
 and headless `-p` cannot ask, so a scripted run needs `--settings '{"permissions":{"allow":["mcp(entryplug_entryplug/*)"]}}'`.
+With the terminal sandbox on, `python.exe` could not start inside it on the build machine ("The file cannot be
+accessed by the system"): the hooks and the MCP server run outside the sandbox and are unaffected, but a `plug …`
+the pilot types into the terminal fails until the sandbox is off for that project.
 The desktop app (engine 2.33.0) reads the same files but is checked by hand: acceptance item C4.6.
 
 ## What is not wired, and why (D90)

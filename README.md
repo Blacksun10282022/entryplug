@@ -142,7 +142,7 @@ The panel above is the Sunzi example equipment as it ships, before `plug init`. 
     "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
-`--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as `additionalContext` (D74). `AGENTS.md` tells Codex-style pilots to run `plug status` first thing instead. Antigravity's SessionStart has its own shape, so its plugin calls `status --emit antigravity`: the panel travels as the message's `renderInfo.markdown`, which Antigravity shows the owner and never sends to the model, and the verdict line is the injected system message (D89).
+`--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as `additionalContext` (D74). `AGENTS.md` tells Codex-style pilots to run `plug status` first thing instead. Antigravity's SessionStart has its own shape, so its plugin calls `status --emit antigravity`: the panel travels as the message's `renderInfo.markdown`, meant for the owner's screen and never sent to the model (whether the app shows it is checked by hand), and the verdict line is the injected system message (D89).
 
 A record may carry `due: YYYY-MM-DD`, the day its judgment is to be settled. From that day the panel adds one `[--] Records due` line naming the oldest such record and how many more there are, and that line rides along with the pilot's verdict line until `outcome` is filled. It is a to-do for the owner, not a broken layer: it is not counted in the sync rate and never turns the verdict orange (D86).
 
