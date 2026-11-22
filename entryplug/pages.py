@@ -1,41 +1,100 @@
-# What: the two human-readable pages `plug index` writes: the root index.md (one line per page) and each
-#       equipment's playbooks/INDEX.md (the playbook directory, plus pending proposals for a missing playbook).
-# In:   cfg (config.load) and what index.build collected while walking (entries · playbooks · stats).
-# Out:  index.md · tools/<t>/playbooks/INDEX.md, written with \n newlines; nothing returned.
+# What: page helpers for `plug index` — paragraph/window chunking, excerpts, row titles, proposal reason spans,
+#       and the two human-readable generated pages: root index.md and each equipment's playbooks/INDEX.md.
+# In:   cfg (config.load) and what index.build collected while walking (entries · playbooks · stats); page units.
+# Out:  index.md · tools/<t>/playbooks/INDEX.md (LF newlines); pure chunk/title helpers.
 # Not:  never reads the FTS table, never tokenises, never edits content; no clock in either page (D64).
-# Who:  index (every build ends by writing them; index re-exports both names) · tests.
-# Note: split out of index.py on 2026-11-12 to keep that file inside the 250-line rule after D84; the code moved
-#       unchanged.
-# Deps: none beyond the package version.
-from . import __version__
+# Who:  index (re-exports all helpers) · tests.
+# Note: split out of index.py to keep that file inside the 250-line budget (D84).
+# Deps: stdlib re · shapes · package version.
+import re
+from . import __version__, shapes
+
+CHUNK, OVERLAP, MAX_UNIT = 600, 100, 800
+REASONS = ("为什么", "最强反证")
+
+
+def paragraphs(unit):
+    """One unit(lstart, lend, pos, text) → paragraphs split on blank lines, line numbers exact."""
+    lstart, _, pos, text = unit
+    out, buf, first = [], [], None
+    for i, line in enumerate(text.split("\n")):
+        if line.strip():
+            first = i if first is None else first
+            buf.append(line)
+        elif buf:
+            out.append((lstart + first, lstart + i - 1, pos, "\n".join(buf)))
+            buf, first = [], None
+    if buf:
+        out.append((lstart + first, lstart + first + len(buf) - 1, pos, "\n".join(buf)))
+    return out
+
+
+def windows(par):
+    """A paragraph <=800 chars is one chunk; longer ones are cut into 600/100 windows, line numbers by offset."""
+    lstart, _, pos, text = par
+    if len(text) <= MAX_UNIT:
+        return [par]
+    starts, acc = [], 0
+    for line in text.split("\n"):
+        starts.append(acc); acc += len(line) + 1
+    at = lambda off: lstart + max(i for i, s in enumerate(starts) if s <= off)
+    return [(at(i), at(min(i + len(text[i:i + CHUNK]) - 1, len(text) - 1)), pos, text[i:i + CHUNK])
+            for i in range(0, len(text), CHUNK - OVERLAP)]
+
+
+def excerpt(text, n=120):
+    return re.sub(r"\s+", " ", text).strip()[:n]
+
+
+def row_title(fm, stem):
+    """The title a row carries. Split out so index.md can name an unchanged file without tokenising it again."""
+    return str(fm.get("title") or fm.get("situation") or fm.get("name") or fm.get("target") or stem)
+
+
+def reason_units(body, first_line):
+    """A pending proposal's 为什么 / 最强反证 sections → units (lstart, lend, pos, text), edge blank lines trimmed."""
+    out = []
+    for head, start, lines in shapes.section_blocks(body.split("\n")):
+        filled = [i for i, line in enumerate(lines) if line.strip()]
+        if head in REASONS and filled:
+            a, b = filled[0], filled[-1]
+            out.append((first_line + start + a, first_line + start + b, "", "\n".join(lines[a:b + 1])))
+    return out
 
 
 def write_index_md(cfg, entries, stats):
-    """Human-readable index: one line per page. No build time in the header — the file is tracked by git and
-    rebuilt by pre-commit on every commit, so a wall clock here left the working tree permanently dirty by one
-    line that meant nothing (D64). Rebuilding now produces the same bytes unless the content actually changed.
-    The build time lives in the index's own meta (`built_at`) and `plug check` prints it."""
+    """Human-readable index: one line per page. No build time in the header — the file is tracked by git, so
+    rebuilding over unchanged content produces the exact same bytes (D64). The build time lives in index meta."""
     lines = ["# index · %d files · %d chunks · entryplug %s" % (len(entries), stats["chunks"], __version__)]
-    for tool in [t["name"] for t in cfg["tools"]] + [None]:
+    known = [t["name"] for t in cfg["tools"]]
+    extra = sorted({e[0] for e in entries if e[0] is not None and e[0] not in known})
+    for tool in known + extra + [None]:
         rows = [e for e in entries if e[0] == tool]
         if rows:
-            lines.append("## %s" % (("tools/" + tool) if tool else "self · proposals"))
+            head = ("tools/" + tool) if tool in known else (tool if tool else "self · proposals")
+            lines.append("## " + head)
             lines += ["- %s · %s · %s · %s" % (e[2], e[4], e[5], e[6]) for e in rows]
     cfg["index_md_path"].write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
+def _cell(v):
+    return str(v or "").replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
+
+
 def write_playbook_index(cfg, playbooks):
     """Playbook directory INDEX.md: id | stance | situation | when_not; pending proposals for new playbooks
-    are listed at the end. Capped at 60 lines."""
+    belonging to that equipment are listed at the end. Capped at 60 lines."""
     for t in cfg["tools"]:
         rows = playbooks.get(t["name"], [])
         if not (t["dir"] / "playbooks").is_dir():
             continue
+        prefix = str(t["path"]).strip("/").replace("\\", "/") + "/playbooks/"
         lines = ["# Playbook directory · %s · generated by plug index, do not hand-edit" % t["name"],
                  "A hit is not an obligation. If none fits, say so and analyse as usual.", "",
                  "| id | stance | situation | when_not |", "|---|---|---|---|"]
-        lines += ["| %s | %s | %s | %s |" % r for r in rows]
-        new = [(rel, tg) for rel, tg in playbooks.get("_pending", []) if "/playbooks/" in tg and not (cfg["root"] / tg).exists()]
+        lines += ["| %s | %s | %s | %s |" % tuple(_cell(x) for x in r) for r in rows]
+        new = [(rel, tg) for rel, tg in playbooks.get("_pending", [])
+               if tg.replace("\\", "/").startswith(prefix) and not (cfg["root"] / tg).exists()]
         if new:
             lines += ["", "## Pending proposals for a missing playbook"] + ["- %s → %s" % x for x in new]
         (t["dir"] / "playbooks" / "INDEX.md").write_text("\n".join(lines[:60]) + "\n", encoding="utf-8", newline="\n")

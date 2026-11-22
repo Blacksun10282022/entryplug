@@ -27,13 +27,23 @@ def copy_example(dst):
     return dst
 
 
-@pytest.fixture
-def repo(tmp_path):
-    """A temporary copy of example-tool, already indexed. Returns cfg."""
+@pytest.fixture(scope="session")
+def _indexed_example(tmp_path_factory):
+    """Build the indexed example-tool copy once per session so tests do not re-tokenise Sunzi 100+ times."""
     from entryplug import config, index
-    cfg = config.load(copy_example(tmp_path / "content"))
-    index.build(cfg)
-    return cfg
+    dst = tmp_path_factory.mktemp("example-base") / "content"
+    copy_example(dst)
+    index.build(config.load(dst))
+    return dst
+
+
+@pytest.fixture
+def repo(tmp_path, _indexed_example):
+    """A temporary copy of example-tool, already indexed. Returns cfg."""
+    from entryplug import config
+    dst = tmp_path / "content"
+    shutil.copytree(_indexed_example, dst)
+    return config.load(dst)
 
 
 def git(root, *args, env=None):
@@ -43,17 +53,27 @@ def git(root, *args, env=None):
                           capture_output=True, text=True, encoding="utf-8", env=e)
 
 
-@pytest.fixture
-def git_repo(repo):
-    """The same copy with git history: everything committed once."""
-    root = repo["root"]
-    (root / ".gitignore").write_text(".kb/\n.claude/skills/\n.agents/skills/\n", encoding="utf-8")
+@pytest.fixture(scope="session")
+def _git_example(tmp_path_factory, _indexed_example):
+    """Pre-committed git copy of the indexed example; copied per test so each test owns an isolated git repo."""
+    root = tmp_path_factory.mktemp("example-git") / "content"
+    shutil.copytree(_indexed_example, root)
+    (root / ".gitignore").write_text(".kb/\n.claude/skills/\n.agents/skills/\n", encoding="utf-8", newline="\n")
     assert git(root, "init", "-q", "-b", "main").returncode == 0
     git(root, "config", "user.name", "t"), git(root, "config", "user.email", "t@example.com")
     assert git(root, "add", "-A").returncode == 0
     r = git(root, "commit", "-q", "-m", "init")
     assert r.returncode == 0, r.stderr
-    return repo
+    return root
+
+
+@pytest.fixture
+def git_repo(tmp_path, _git_example):
+    """The same copy with git history: everything committed once."""
+    from entryplug import config
+    dst = tmp_path / "content"
+    shutil.copytree(_git_example, dst)
+    return config.load(dst)
 
 
 def trust_codex(root, home):

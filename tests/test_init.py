@@ -251,3 +251,43 @@ def test_init_updates_the_matcher_of_an_earlier_install(git_repo):
     assert plug(root, "init", "--pilot", "codex").returncode == 0
     codex = json.loads((root / ".codex/hooks.json").read_text(encoding="utf-8"))
     assert "PowerShell" in codex["hooks"]["PreToolUse"][0]["matcher"]
+    assert len(codex["hooks"]["SessionStart"]) == 2 and codex["hooks"]["SessionStart"][1]["matcher"] == "compact"
+
+
+def test_glob_boundary_kit_deny_init_refresh_and_tomllib_codex_trust(git_repo, tmp_path):
+    from entryplug import codex as cx, config
+    root = git_repo["root"]
+    # 1. `*` never crosses `/`, while `**` does
+    assert config.matches(["self/*.md"], "self/style.md") and not config.matches(["self/*.md"], "self/records/a.md")
+    assert not config.matches(["*.md"], "tools/sunzi/SKILL.md")
+    # 2. kit/** is covered by Claude Code deny rules too
+    assert any(r.endswith("/tools/sunzi/kit/**)") for r in init.deny_rules(git_repo))
+    # 3. Rerunning init after python/repo move refreshes .mcp.json, .codex/config.toml and Claude hooks in place
+    (root / ".claude").mkdir(exist_ok=True)
+    (root / ".claude/settings.json").write_text(json.dumps({
+        "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": '"C:/old/python.exe" "C:/old/gates/outbound.py"', "timeout": 30}]},
+                                 {"matcher": "Read", "hooks": [{"type": "command", "command": "custom-hook"}]}]}
+    }), encoding="utf-8")
+    (root / ".mcp.json").write_text(json.dumps({"mcpServers": {"entryplug": {"command": "C:/old/python.exe"}, "other": {"command": "o"}}}), encoding="utf-8")
+    (root / ".codex").mkdir(exist_ok=True)
+    (root / ".codex/config.toml").write_text('[other]\nx = 1\n\n[mcp_servers.entryplug]\ncommand = "C:/old/python.exe"\nargs = []\n', encoding="utf-8")
+    assert plug(root, "init", "--pilot", "both").returncode == 0
+    s = json.loads((root / ".claude/settings.json").read_text(encoding="utf-8"))
+    assert len(s["hooks"]["PreToolUse"]) == 2 and init.PY in s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    assert s["hooks"]["PreToolUse"][1]["hooks"][0]["command"] == "custom-hook"
+    m = json.loads((root / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert m["entryplug"]["command"] == init.PY and m["other"]["command"] == "o"
+    t = (root / ".codex/config.toml").read_text(encoding="utf-8")
+    assert "[other]" in t and init.PY in t and "C:/old/python.exe" not in t
+    # 4. codex_trust & posture parse TOML properly (double-quoted keys, comments, sub-tables)
+    home = tmp_path / "cxhome"
+    home.mkdir()
+    pairs = cx.codex_hooks(root / ".codex/hooks.json")
+    toml_lines = ['approval_policy = "on-request"', 'sandbox_mode = "workspace-write"',
+                  '[profiles.yolo]', 'approval_policy = "never"', '']
+    for k, h in pairs:
+        esc = k.replace("\\", "\\\\")
+        toml_lines += ['[hooks.state."%s"]' % esc, '# enabled = false', 'trusted_hash = "%s"' % h, '']
+    (home / "config.toml").write_text("\n".join(toml_lines), encoding="utf-8")
+    assert cx.codex_trust(config.load(root), codex_home=str(home)) is None
+    assert "approval_policy=on-request" in cx.posture(codex_home=str(home))

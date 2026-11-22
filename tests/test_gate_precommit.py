@@ -158,3 +158,20 @@ def test_plug_staged_and_plug_root_cannot_reach_a_real_commit(git_repo):
     r = g("commit", "-q", "-m", "someone else's plug.yaml", env={"PLUG_ROOT": str(other)})
     assert r.returncode != 0 and "berserk lock" in r.stderr, r.stderr
     assert "sneaked" not in g("show", "HEAD:self/RULES.md").stdout
+
+
+def test_git_mv_from_protected_to_free_zone_is_refused(git_repo):
+    """Without --no-renames, `git diff --cached --name-only` printed only the destination `work/RULES.md`, so
+    `git mv self/RULES.md work/RULES.md` bypassed pre-commit with exit 0."""
+    root = git_repo["root"]
+    g = real_hook(root)
+    (root / "work").mkdir(exist_ok=True)
+    assert g("mv", "self/RULES.md", "work/RULES.md").returncode == 0
+    r = g("commit", "-q", "-m", "move rules out of protected path")
+    assert r.returncode != 0 and "berserk lock" in r.stderr and "self/RULES.md" in r.stderr, r.stderr
+    assert (root / "self/RULES.md").exists() or "self/RULES.md" in g("ls-tree", "--name-only", "HEAD", "self/").stdout
+
+
+def test_self_style_is_protected_by_default(repo):
+    r = run_gate(repo["root"], ["self/style.md"])
+    assert r.returncode == 1 and "berserk lock" in r.stderr and "self/style.md" in r.stderr, r.stderr

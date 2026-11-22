@@ -1,38 +1,24 @@
-# What: `plug status` — the boot self-check. One line per real check, then a verdict. Nothing here is a guess:
-#       every line is a fact read off disk or measured (the index is really queried and timed).
-# In:   cfg. `--emit` wraps the panel for a SessionStart hook: the panel as systemMessage (the owner's screen),
-#       one verdict line as additionalContext (the pilot); `--emit antigravity` says the same in Antigravity's shape.
-# Out:  the panel on stdout; exit code 0, or 1 only when the index layer itself is unusable (nothing can be
-#       searched, so the pilot must know before it starts).
-# Not:  never writes anything, never edits content, never injects rules or search results into the pilot;
-#       it is a status panel, not a briefing. It does not run the equipment's checks/ (that is plug check).
-# Who:  the owner (first command in a new terminal) · a SessionStart hook · AGENTS.md tells Codex-style pilots
-#       to run it first thing · tests.
-# Note: the sync rate is simply passed/total over the counted checks; .plug-off is informational and is not
-#       counted. A failing line prints [NG] and the verdict becomes PATTERN ORANGE with the layer and a fix hint.
-#       An index behind the content is [NG] too, with how far behind (D83), but still searchable, so exit stays 0.
-#       Records whose `due` day has come with no outcome get one [--] line, informational like .plug-off (D86).
-# Deps: stdlib json · sqlite3 (via search) · config · shapes · index · antigravity (its boot shape and plugin state).
+# What: `plug status` — the boot self-check (EVA panel). One line per real check, then a verdict.
+# In:   cfg; `--emit` wraps the panel for SessionStart (panel as systemMessage, one verdict line for the pilot).
+# Out:  the panel on stdout; exit 0, or 1 only when the index layer itself is unusable.
+# Not:  never writes anything, never edits content, never injects rules or search results; never runs checks/.
+# Who:  the owner · SessionStart hook · AGENTS.md · tests.
+# Note: .plug-off and `Records due` (D86) are [--] informational lines, never counted and never orange.
+#       A stale index is [NG] with how far behind (D83), exit stays 0.
+# Deps: stdlib json · config · shapes · search · trust · index · antigravity.
 import json, os, re, time
 from datetime import date
 from pathlib import Path
 from . import antigravity, config, shapes, search, trust, index
 
-# The panel is for the owner's eyes; the pilot gets one line. In the 2026-09-03 blind test both pilots copied the
-# whole panel, hook and trust status included, into answers meant for the owner (D73); since D74 the panel travels
-# as systemMessage (shown on screen, never in the model's context) and the context carries only the verdict line
-# plus any [NG] lines, so a broken layer still reaches the pilot.
 PILOT_ONLY = "(boot line for you, the pilot: never paste it, a hook or trust status, or index numbers into an answer for the owner)"
-
-WIDTH = 20
+WIDTH, DUE_LABEL, HEAD_BYTES = 20, "Records due", 4096
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
-DUE_LABEL = "Records due"
 RE_DUE = re.compile(rb"(?m)^due[ \t]*:")
-HEAD_BYTES = 4096
+precommit_path = trust.precommit_path
 
 
 def dots(label, width=WIDTH):
-    """`LCL pressure ....... ` — the label, dot leader to a fixed width, one space before the detail."""
     return (label + " ").ljust(width, ".") + " "
 
 
@@ -54,23 +40,9 @@ def deny_list(root):
 
 def hooks_text(root):
     """Everything the pilots' hook configs say, as one blob — enough to see whether a gate is wired."""
-    out = []
-    for f in (".claude/settings.json", ".claude/settings.local.json", ".codex/hooks.json", antigravity.PLUGIN + "/hooks.json"):
-        p = root / f
-        if p.exists():
-            out.append(p.read_text(encoding="utf-8", errors="ignore"))
-    return "\n".join(out)
-
-
-def precommit_path(root):
-    hp = ""
-    try:
-        import subprocess
-        hp = subprocess.run(["git", "config", "core.hooksPath"], cwd=str(root), capture_output=True, text=True).stdout.strip()
-    except OSError:
-        pass
-    base = (Path(hp) if os.path.isabs(hp) else root / hp) if hp else root / ".git" / "hooks"
-    return base / "pre-commit"
+    return "\n".join((root / f).read_text(encoding="utf-8", errors="ignore")
+                     for f in (".claude/settings.json", ".claude/settings.local.json", ".codex/hooks.json",
+                               antigravity.PLUGIN + "/hooks.json") if (root / f).exists())
 
 
 def check_index(cfg):
@@ -79,12 +51,15 @@ def check_index(cfg):
         return False, "%s missing — nothing can be searched" % cfg["index"]
     try:
         con = search.open_ro(cfg)
-        docs = con.execute("select count(distinct doc) from fts").fetchone()[0]
-        meta = dict(con.execute("select key, value from meta"))
-        con.close()
-        probe = next(iter(json.loads(meta.get("aliases", "{}")) or {"a": []}), "a")
+        try:
+            docs = con.execute("select count(distinct doc) from fts").fetchone()[0]
+            meta = dict(con.execute("select key, value from meta"))
+        finally:
+            con.close()
+        aliases = json.loads(meta.get("aliases", "{}"))
+        probe = next((k for k, v in aliases.items() if all(len(m) <= 4 for m in [k] + v if index.CJK.search(m))), "a")
         t0 = time.perf_counter()
-        search.search(cfg, probe, scope="all", k=3, auto_index=False)      # status never writes (D76)
+        search.search(cfg, probe, scope="all", k=3, auto_index=False, check_stale=False)  # pure query ms; stale checked once in panel()
         ms = int((time.perf_counter() - t0) * 1000)
     except Exception as e:
         return False, "%s unreadable (%s: %s)" % (cfg["index"], type(e).__name__, e)
@@ -104,17 +79,25 @@ def check_base(cfg):
 
 
 def check_atfield(cfg):
-    """Deny rules must cover self/ and every registered equipment; the pre-commit hook must be installed."""
-    deny = deny_list(cfg["root"])
-    self_ok = any(d.startswith("Edit(") and ("RULES.md" in d or "/%s/**" % cfg["self"] in d) for d in deny)
-    missing = [t["name"] for t in cfg["tools"]
-               if not any(str(t["path"]).strip("/") in d or "tools/**" in d for d in deny)]
-    hook = precommit_path(cfg["root"])
+    """Deny rules must cover self/, registered equipment and `protect:` when Claude Code is wired (or before any
+    pilot is wired). Codex and Antigravity have no repo-level deny layer, so pre-commit alone holds there."""
+    root = cfg["root"]
+    has_claude = any((root / f).exists() for f in DENY_FILES)
+    has_other = (root / ".codex" / "hooks.json").exists() or antigravity.installed(cfg)
+    hook = precommit_path(root)
     pre_ok = trust.hook_ok(hook)
-    bits = ["deny written (%d rules)" % len(deny) if self_ok and not missing else
-            ("deny MISSING" if not deny else "deny does not cover " + ("self/" if not self_ok else ", ".join(missing))),
-            "pre-commit armed" if pre_ok else ("pre-commit NOT installed" if not hook.exists() else "pre-commit is NOT the plug init hook (run plug init)")]
-    return (self_ok and not missing and pre_ok), " · ".join(bits)
+    pre_msg = "pre-commit armed" if pre_ok else ("pre-commit NOT installed" if not hook.exists() else "pre-commit is NOT the plug init hook (run plug init)")
+    if not has_claude and has_other:
+        return pre_ok, "no deny layer (pre-commit only) · " + pre_msg
+    deny = deny_list(root)
+    self_ok = any(d.startswith("Edit(") and ("RULES.md" in d or "/%s/**" % cfg["self"] in d) for d in deny)
+    missing = [t["name"] for t in cfg["tools"] if not any(str(t["path"]).strip("/") in d or "tools/**" in d for d in deny)]
+    extra = [str(p).strip("/").replace("\\", "/") for p in cfg.get("protect") or []]
+    miss_extra = [p for p in extra if not any(d.startswith("Edit(") and d.endswith("/" + p + ")") for d in deny)]
+    deny_ok = self_ok and not missing and not miss_extra
+    deny_msg = ("deny written (%d rules)" % len(deny) if deny_ok else
+                ("deny MISSING" if not deny else "deny does not cover " + ("self/" if not self_ok else ", ".join(missing + miss_extra))))
+    return (deny_ok and pre_ok), "%s · %s" % (deny_msg, pre_msg)
 
 
 def check_berserk(cfg):
@@ -228,10 +211,15 @@ def panel(cfg):
 
 
 def brief(text):
-    """The one line the pilot gets (D74): the verdict, plus every [NG] line so a degraded layer is still known, plus
-    the records-due line so the pilot raises it at session start (D86)."""
-    lines = text.splitlines()
-    ng = [l.strip() for l in lines if l.startswith("[NG]") or l.startswith("[--] " + dots(DUE_LABEL))]
+    """The one line the pilot gets (D74): verdict, every [NG] segment (including Sortie lock when Berserk lock is
+    [OK] on the same line), and the records-due line (D86)."""
+    lines, ng = text.splitlines(), []
+    for l in lines:
+        s = l.strip()
+        if s.startswith("[--] " + dots(DUE_LABEL)):
+            ng.append(s)
+        elif "[NG]" in s:
+            ng += [m.strip() for m in re.findall(r"\[NG\].*?(?=\s+\[(?:OK|NG)\]|$)", s)]
     verdict = lines[-1].strip() if lines else ""
     return " · ".join(["entry plug boot: " + verdict] + ng) + " " + PILOT_ONLY
 

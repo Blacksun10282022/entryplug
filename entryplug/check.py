@@ -7,10 +7,10 @@
 # Not:  never edits content (its only writes are an expired proposal and the numbers page); no score; no LLM.
 # Who:  cli (plug check) · gates/precommit (0 ERROR to pass) · apply (before and after landing) · status · tests.
 # Deps: stdlib · ages (file age; asks git) · shapes · config · numbers · trust (runs the equipment checks).
-import hashlib, os, re, sqlite3, sys, time
+import hashlib, re, time
 from datetime import date
-from . import __version__, SHAPE_VERSION, antigravity, config, shapes, trust
-from .ages import age_days, git_added
+from . import __version__, SHAPE_VERSION, antigravity, config, index, shapes, trust
+from .ages import age_days, git_first, iso_day, unique_dest
 
 HOOKS = ("precommit", "outbound", "precompact", "stop")
 VERBS = ("index", "check", "apply", "eval", "search", "status", "init", "mcp", "hash")
@@ -20,12 +20,12 @@ MAP_LIE = re.compile(r"(?i)sortie lock.{0,200}(only records|cannot veto|records,
 DESC_ONE, DESC_TOTAL, EXPIRE_DAYS, HOOK_DAYS, NEW_DAYS = 1536, 4000, 30, 30, 30
 
 
-def quote_in(docs, doc_id, quote):
+def quote_in(docs_norm, doc_id, quote):
     q = re.sub(r"\s+", "", quote)
-    return any(q in re.sub(r"\s+", "", t) for t in docs.get(doc_id, []))
+    return any(q in t for t in docs_norm.get(doc_id, []))
 
 
-def run(cfg, expire=True, tool_checks=True, today=None):
+def run(cfg, expire=True, tool_checks=True, today=None, write_numbers=True):
     today, at, root = today or date.today(), time.strftime("%Y-%m-%d %H:%M"), cfg["root"]
     E, W, moved = [], [], []
     err = lambda code, f, msg: E.append({"level": "ERROR", "code": code, "file": f, "msg": msg, "at": at})
@@ -44,17 +44,22 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         err("tool_path", "plug.yaml", "mounted equipment directory does not exist: %s" % t["path"])
     for c in [x for x in cfg["corpus"] if not (root / str(x["path"])).is_dir()]:
         warn("corpus_path", "plug.yaml", "declared corpus directory does not exist: %s" % c["path"])
-    added, docs, entries, records, proposals, materials, manuals, rules, hashes = git_added(root), {}, {}, [], [], [], [], None, {}
+    (added, commits), docs, docs_norm, corpus_pick = git_first(root), {}, {}, {}
+    entries, records, proposals, materials, manuals, rules, hashes = {}, [], [], [], [], None, {}
     tool_of = {t["name"]: t for t in cfg["tools"]}
     for f in config.walk(cfg):
         if f["area"] == "checks":
             continue
         text = f["path"].read_text(encoding="utf-8")
-        hashes[f["rel"]] = (hashlib.sha1(text.encode("utf-8")).hexdigest(), f["area"])
+        hashes[f["rel"]] = (hashlib.sha1(text.encode("utf-8")).hexdigest(), f["area"], f["sub"])
         if f["area"] == "corpus":
             d = shapes.parse_doc(text, f["path"], f["sub"])
-            docs.setdefault(d["id"], []).append(d["text"])
-            docs.setdefault(d["title"], []).append(d["text"])
+            norm = re.sub(r"\s+", "", d["text"])
+            for key in (d["id"], d["title"]):
+                docs.setdefault(key, []).append(d["text"])
+                docs_norm.setdefault(key, []).append(norm)
+            if d["id"] not in corpus_pick or (f["sub"] == "clean" and corpus_pick[d["id"]][1] == "raw"):
+                corpus_pick[d["id"]] = (f["rel"], f["sub"])
             continue
         if f["area"] == "rules":
             rules = shapes.parse_rules(text)
@@ -98,9 +103,9 @@ def run(cfg, expire=True, tool_checks=True, today=None):
                 if ref not in anchors:
                     err("pid", where, "%s does not resolve (no such anchor)" % ref)
             if o["quote"] is not None and o["doc"]:
-                if o["doc"] not in docs:
+                if o["doc"] not in docs_norm:
                     err("anchor", where, "the corpus has no doc %r" % o["doc"])
-                elif not quote_in(docs, o["doc"], o["quote"]):
+                elif not quote_in(docs_norm, o["doc"], o["quote"]):
                     err("anchor", where, "anchor sentence not found in %s: %r" % (o["doc"], o["quote"][:30]))
             elif not o["refs"] and not o["unanchored"]:
                 err("obs_src", where, "src carries neither an anchor sentence nor a ^p reference (mark [未锚] when there is no original)")
@@ -167,12 +172,20 @@ def run(cfg, expire=True, tool_checks=True, today=None):
         if "plug apply" not in p["text"]:
             warn("footer", p["rel"], "no footer with the two copy-paste lines (approve / --reject); the owner cannot act on it from the chat")
         if expire and p["age"] > EXPIRE_DAYS:
-            dst = cfg["proposals_dir"] / "rejected" / p["path"].name
+            dst = unique_dest(cfg["proposals_dir"] / "rejected", p["path"].name)
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(p["text"].rstrip("\n") + "\n\nrejected: %s · expired (%d days unapproved, moved here by plug check)\n" % (today, p["age"]), encoding="utf-8", newline="\n")
             p["path"].unlink()
+            p["sub"] = "rejected"                       # so the report does not list a just-deleted pending file
+            hashes.pop(p["rel"], None)
             moved.append(p["rel"])
     for m in materials:
+        exp = iso_day(m["fm"].get("expires"))
+        if exp is not None or m["sub"] == "kit":        # kit pages expire only when `expires:` is declared
+            if exp is not None and exp < today:
+                warn("expired", m["rel"], "material expired on %s (%d days ago)" % (exp, (today - exp).days))
+                m["expired"] = True
+            continue
         ttl = tool_of.get(m["tool"], {}).get("ttl_days", {})
         days = ttl.get(str(m["fm"].get("kind")), ttl.get("default", 90))
         if m["age"] > days:
@@ -210,23 +223,22 @@ def run(cfg, expire=True, tool_checks=True, today=None):
             warn("index_md", cfg["index_md"], "index.md is oversized (%d chars)" % len(lines))
     for h in HOOKS:
         header["hooks"][h] = last = (cfg["hooks_dir"] / h).read_text(encoding="utf-8").strip() if (cfg["hooks_dir"] / h).exists() else None
-        if not last or (today - date.fromisoformat(last[:10])).days > HOOK_DAYS:
-            warn("hook", ".kb/hooks/" + h, "hook %s %s" % (h, "has never fired" if not last else "last fired %s, over %d days ago" % (last, HOOK_DAYS)))
-    if cfg["index_path"].exists():
-        con = sqlite3.connect("file:%s?mode=ro" % cfg["index_path"].as_posix(), uri=True)
-        meta, indexed = dict(con.execute("select key, value from meta")), dict(con.execute("select rel, hash from files"))
-        con.close()
-        header["index_built"] = meta.get("built_at")
-        header["index_stale"] = any(indexed.get(rel, h if area in ("corpus", "proposal") else None) != h for rel, (h, area) in hashes.items()) \
-            or any(rel not in hashes for rel in indexed)
-    else:
-        header["index_stale"] = True
-    if header["index_stale"]:
+        day = iso_day(last[:10]) if last else None
+        if not day or (today - day).days > HOOK_DAYS:
+            warn("hook", ".kb/hooks/" + h, "hook %s %s" % (h, "has never fired" if not last else ("has an unreadable stamp %r" % last[:24] if not day else "last fired %s, over %d days ago" % (last, HOOK_DAYS))))
+    winners = {rel for rel, _ in corpus_pick.values()}
+    expected = {rel: h for rel, (h, area, sub) in hashes.items()
+                if (area != "proposal" or sub == "pending") and (area != "corpus" or rel in winners)}
+    header["index_built"], header["index_stale"], idx_err = index.hashes_stale(cfg, expected)
+    if idx_err:
+        warn("index_stale", cfg["index"], "index is unreadable (%s); run plug index --full" % idx_err)
+    elif header["index_stale"]:
         warn("index_stale", cfg["index"], "the index is older than the content (or absent); run plug index")
     if tool_checks:
         trust.run_checks(cfg, warn, err)             # only scripts git tracks unchanged (D70)
-    from . import numbers
-    out["numbers"] = numbers.page(cfg, records, today, docs, anchors, ids)
-    cfg["numbers_path"].parent.mkdir(parents=True, exist_ok=True)
-    cfg["numbers_path"].write_text(out["numbers"], encoding="utf-8", newline="\n")
+    if write_numbers:
+        from . import numbers
+        out["numbers"] = numbers.page(cfg, records, today, docs, anchors, ids, commits=commits)
+        cfg["numbers_path"].parent.mkdir(parents=True, exist_ok=True)
+        cfg["numbers_path"].write_text(out["numbers"], encoding="utf-8", newline="\n")
     return out

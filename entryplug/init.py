@@ -20,14 +20,15 @@
 #       leaves it alone; on Windows git runs it with sh); if the owner set core.hooksPath it goes there instead.
 #       Hooks belong in settings.json (Claude Code does not read .claude/hooks.json; the plugin form is in pilots/).
 # Deps: stdlib json · subprocess (only to ask git) · config · index · antigravity (its plugin files).
-import json, os, re, shutil, subprocess, sys
+import json, os, re, shutil, sys
 from pathlib import Path
-from . import antigravity, config, index
+from . import antigravity, codex as codex_mod, config, index, mirror, trust
+from .mirror import user_skills_dir  # noqa: F401  (re-exported after move for 250-line budget)
 
 REPO, PY = Path(__file__).resolve().parents[1], Path(sys.executable).as_posix()
 SELF_PROTECT = ["self/RULES.md", "self/facts/**", "self/style.md", "plug.yaml"]
 MATCHER, CODEX_MATCHER = config.MATCHER, config.CODEX_MATCHER    # the tools the pilots really expose (D65)
-TOOL_PROTECT = ["SKILL.md", "READING.md", "dict/**", "playbooks/**", "materials/**", "checks/**"]
+TOOL_PROTECT = ["SKILL.md", "READING.md", "dict/**", "playbooks/**", "materials/**", "kit/**", "checks/**"]
 ZONE_NOTE = {"work": "Products land here, one directory per equipment. Not indexed, not protected, freely writable.\n",
              "workshop": "Where new equipment is built before it is registered in plug.yaml. Not indexed, not protected.\n"}
 
@@ -82,39 +83,31 @@ def cli_cmd(cfg, *args):
     return '"%s" -m entryplug.cli --root "%s" %s' % (PY, cfg["root"].as_posix(), " ".join(args))
 
 
-def codex_cmd(*parts):
-    """Codex takes `command` as ONE string and splits it on whitespace without honouring quotes, so the Claude
-    form (quoted paths) makes it try to spawn a program whose name contains quote characters — which is why every
-    Codex hook reported Failed. Emit bare, space-separated words instead. A path containing a space cannot be
-    expressed this way at all; spaced() reports that so init can warn instead of writing something that dies later."""
-    return " ".join(str(p) for p in parts)
-
-
 def spaced(*parts):
     return [str(p) for p in parts if " " in str(p)]
 
 
 def codex_hooks(cfg):
-    """The same five gates, in Codex 0.152's shape: {hooks: {<Event>: [{matcher, hooks: [handler]}]}} with
-    handler {type, command, timeout}. Event names are PascalCase, the payload is Claude-shaped, so the gate
-    scripts are unchanged. PreToolUse blocks here as it does on Claude Code: the deny decision goes on stdout and
-    the process exits 0 (D56) — outbound.py handles both. (D53 first concluded that Codex hooks cannot veto; that
-    was wrong, and D57 says why: the three forms tried are each marked unsupported in Codex's own binary.)
-    What Codex still has no equivalent of is `permissions.deny`, so the berserk lock leans on pre-commit alone."""
-    gate = lambda s, *a: codex_cmd(PY, (REPO / "gates" / s).as_posix(), *a)
-    cli = codex_cmd(PY, "-m", "entryplug.cli", "--root", cfg["root"].as_posix(), "status", "--emit")
-    return {"hooks": {
-        "PreToolUse": [{"matcher": CODEX_MATCHER, "hooks": [{"type": "command", "command": gate("outbound.py"), "timeout": 30}]}],
-        "PreCompact": [{"hooks": [{"type": "command", "command": gate("precompact.py"), "timeout": 30}]}],
-        "SessionStart": [{"hooks": [{"type": "command", "command": cli, "timeout": 30}]}],
-        "Stop": [{"hooks": [{"type": "command", "command": gate("stop.py"), "timeout": 20}]}],
-    }}
+    return codex_mod.hooks_config(cfg, PY, REPO, CODEX_MATCHER)
+
+
+def _hook_tag(cmd):
+    """Identify which entryplug hook a command runs so rerunning init after moving python/repo updates it in place."""
+    s = str(cmd or "").replace("\\", "/")
+    if "gates/outbound.py" in s:
+        return "outbound"
+    if "gates/precompact.py" in s:
+        return "precompact-emit" if "--emit" in s else "precompact"
+    if "entryplug.cli" in s and "status" in s and "--emit" in s:
+        return "status"
+    if "gates/stop.py" in s:
+        return "stop"
+    return None
 
 
 def merge_hooks(cfg):
-    """Five hooks merged into `hooks`, returned as a mutator: sortie lock (PreToolUse) · compaction pin
-    (PreCompact) · pin re-injection and the boot panel (SessionStart) · record reminder (Stop). A command that is
-    already there is not added twice, and nothing else in the file is touched."""
+    """Five hooks merged into `hooks`: updates entryplug's own entries in place (command + matcher) and leaves
+    every other hook in the file untouched."""
     want = {"PreToolUse": [{"matcher": MATCHER, "hooks": [{"type": "command", "command": hook_cmd("outbound.py"), "timeout": 30}]}],
             "PreCompact": [{"hooks": [{"type": "command", "command": hook_cmd("precompact.py"), "timeout": 30}]}],
             "SessionStart": [{"matcher": "compact", "hooks": [{"type": "command", "command": hook_cmd("precompact.py", "--emit"), "timeout": 30}]},
@@ -125,11 +118,17 @@ def merge_hooks(cfg):
         for event, groups in want.items():
             have = hooks.setdefault(event, [])
             for g in groups:
-                mine = [x for x in have if any(h.get("command") == g["hooks"][0]["command"] for h in x.get("hooks", []))]
+                cmd, tag = g["hooks"][0]["command"], _hook_tag(g["hooks"][0]["command"])
+                mine = [x for x in have if any(h.get("command") == cmd or (tag and _hook_tag(h.get("command")) == tag)
+                                               for h in x.get("hooks", []))]
                 if not mine:
                     have.append(g)
-                elif "matcher" in g and mine[0].get("matcher") != g["matcher"]:
-                    mine[0]["matcher"] = g["matcher"]      # a widened matcher must reach installs made earlier (D65)
+                else:
+                    for h in mine[0].get("hooks", []):
+                        if h.get("command") == cmd or (tag and _hook_tag(h.get("command")) == tag):
+                            h["command"] = cmd
+                    if "matcher" in g and mine[0].get("matcher") != g["matcher"]:
+                        mine[0]["matcher"] = g["matcher"]      # a widened matcher must reach installs made earlier (D65)
     return mutate
 
 
@@ -137,8 +136,7 @@ def install_hook(cfg, log):
     root = cfg["root"]
     if not (root / ".git").exists():
         return log.append(("skipped", "pre-commit: not a git repo (git init first, then plug init)"))
-    hp = subprocess.run(["git", "config", "core.hooksPath"], cwd=str(root), capture_output=True, text=True).stdout.strip()
-    target = ((Path(hp) if os.path.isabs(hp) else root / hp) if hp else root / ".git" / "hooks") / "pre-commit"
+    target = trust.precommit_path(root)
     if target.exists() and "precommit.py" not in target.read_text(encoding="utf-8", errors="ignore"):
         shutil.move(str(target), str(target) + ".before-entryplug")
         log.append(("backed up", target.with_name("pre-commit.before-entryplug")))
@@ -174,7 +172,7 @@ def claude(cfg, log):
         hooks(d)
     merge_json(root / ".claude" / "settings.json", mutate, log)
     server = {"command": PY, "args": ["-m", "entryplug.cli", "--root", root.as_posix(), "mcp"], "env": {"PYTHONIOENCODING": "utf-8"}}
-    merge_json(root / ".mcp.json", lambda d: d.setdefault("mcpServers", {}).setdefault("entryplug", server), log)
+    merge_json(root / ".mcp.json", lambda d: d.setdefault("mcpServers", {}).__setitem__("entryplug", server), log)
     copy_if_absent(REPO / "pilots" / "claude-code" / "CLAUDE.md", root / "CLAUDE.md", log)
 
 
@@ -195,9 +193,11 @@ def codex(cfg, log):
                                 "not run on that side."))
     toml = cfg["root"] / ".codex" / "config.toml"
     old = toml.read_text(encoding="utf-8") if toml.exists() else ""
+    block = '[mcp_servers.entryplug]\ncommand = "%s"\nargs = ["-m", "entryplug.cli", "--root", "%s", "mcp"]\n' % (PY, cfg["root"].as_posix())
     if "[mcp_servers.entryplug]" in old:
-        return log.append(("already current", toml))
-    put(toml, old.rstrip("\n") + ("\n\n" if old else "") + '[mcp_servers.entryplug]\ncommand = "%s"\nargs = ["-m", "entryplug.cli", "--root", "%s", "mcp"]\n' % (PY, cfg["root"].as_posix()), log)
+        new = re.sub(r"(?ms)^\[mcp_servers\.entryplug\][ \t]*\n.*?(?=^\[|\Z)", lambda _: block + "\n", old).rstrip("\n") + "\n"
+        return put(toml, new, log)
+    put(toml, old.rstrip("\n") + ("\n\n" if old else "") + block, log)
 
 
 def agy(cfg, log):
@@ -215,36 +215,8 @@ def agy(cfg, log):
         copy_if_absent(REPO / "pilots" / src / name, cfg["root"] / name, log)
 
 
-def user_skills_dir(cfg, pilot):
-    """Where a pilot looks for user-level skills: plug.yaml's pilots.<name>.user_skills, else the default for
-    that pilot. PLUG_USER_SKILLS redirects every pilot at once into <it>/<pilot> (tests and unusual layouts)."""
-    override = os.environ.get("PLUG_USER_SKILLS")
-    if override:
-        return Path(os.path.expanduser(override)) / pilot
-    d = cfg["pilots"].get(pilot, {}).get("user_skills") or config.USER_SKILLS.get(pilot, "~/.%s/skills" % pilot)
-    return Path(os.path.expanduser(d))
-
-
 def link_skills(cfg, log, pilots):
-    """Equipment = skill: copy each SKILL.md into the user-level skills directory so the equipment is available
-    outside the content repo. Manual trigger only. A copy (not a symlink) so the content repo's absolute path can
-    be stamped in — that is what tells the equipment where products go. `disable-model-invocation: true` rides
-    along in the frontmatter and is passed through to Codex's openai.yaml."""
-    for pilot in pilots:
-        base = user_skills_dir(cfg, pilot)
-        for t in cfg["tools"]:
-            src = t["dir"] / "SKILL.md"
-            if not src.exists():
-                continue
-            text = src.read_text(encoding="utf-8")
-            stamp = ("\n---\n\nInstalled by `plug init --link-skills` from `%s`.\n"
-                     "Base repo: `%s`. Products go to `%s/work/%s/` unless the owner names somewhere else.\n"
-                     "Outside that repo the Base (self/) is not loaded: say so instead of inventing the owner's rules.\n"
-                     % (config.rel(cfg, src), cfg["root"].as_posix(), cfg["root"].as_posix(), t["name"]))
-            put(base / t["name"] / "SKILL.md", text.rstrip("\n") + "\n" + stamp, log)
-            if pilot == "codex":
-                (base / t["name"] / "agents").mkdir(parents=True, exist_ok=True)
-                index.write_openai_yaml(base / t["name"] / "agents" / "openai.yaml", not index.model_invocation_disabled(text))
+    mirror.link_skills(cfg, log, pilots, put)
 
 
 def run(cfg, pilot, link=False):

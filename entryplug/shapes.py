@@ -63,10 +63,14 @@ def section_blocks(lines):
     first heading. Index reads it with exact line numbers (D84); sections() merges it by heading."""
     out, fence = [("", 0, [])], 0                     # fence = length of the open run, 0 when outside one
     for i, line in enumerate(lines):
-        run = re.match(r"^(`{3,})", line)
-        if run:                                       # only a run at least as long closes the one that is open,
-            n = len(run.group(1))                     # so ``` inside a ```` block stays inert (same rule as apply)
-            fence = n if not fence else (0 if n >= fence else fence)
+        if not fence:
+            run = re.match(r"^(`{3,})[^`]*$", line)   # CommonMark: backtick opening info string cannot contain backticks
+            if run:
+                fence = len(run.group(1))
+        else:
+            close = re.match(r"^(`{3,})[ \t]*$", line)  # closing fence carries no info string and >= opening backticks
+            if close and len(close.group(1)) >= fence:
+                fence = 0
         m = None if fence else re.match(r"^##\s+(.+?)\s*$", line)
         if m:
             out.append((m.group(1).strip(), i + 1, []))
@@ -155,13 +159,9 @@ def parse_file(text, area):
 
 
 def rule_citations(text, ids):
-    """Every rule-id-shaped token in text, with whether it is written as a rule citation: on a line that names
-    RULES, under a heading that says 规则, or in the rule-line form `X9 · …`. Prefixes are the ones that occur in
-    RULES.md; the lowercase suffix is part of the id (without it P2a matched nothing at all — the trailing letter
-    broke the word-boundary lookahead). A cited token that does not exist is a broken reference; an uncited one is
-    usually a name that only looks like an id — an MV plate P1c-…, a priority P0, AWS S3, a P10–P90 range, a source
-    label S2 — and is not a reference at all (D82). 2026-10-17 in unit-01: all 47 rid ERRORs were uncited names,
-    and 1,426 of the 1,685 real references were cited, so the rule keeps most of the net."""
+    """Every rule-id-shaped token in text with whether it is written as a rule citation (line naming RULES, heading
+    saying 规则, or `X9 · …`). Prefixes come from RULES.md; lowercase suffix is part of the id (P2a). Uncited unknown
+    tokens are names (MV plates, priorities, AWS S3), warned once per record instead of ERROR (D82)."""
     if not ids:
         return []
     pre = "|".join(sorted({re.match(r"[A-Z]+", i).group(0) for i in ids}))

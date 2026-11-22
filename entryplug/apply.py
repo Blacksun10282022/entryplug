@@ -20,7 +20,7 @@ import difflib, hashlib, os, re, shutil, subprocess
 from collections import Counter
 from datetime import date
 from pathlib import Path
-from . import config, shapes
+from . import ages, config, shapes
 
 # Any of these in the environment means a coding agent is driving. Detected defensively: presence is enough,
 # the value is not inspected, and an unknown future marker simply is not caught (the hard lock stays pre-commit).
@@ -94,9 +94,9 @@ def parse_proposal(path):
     p = shapes.parse_file(text, "proposal")
     body = p["sections"].get("改成什么", "")
     first = next((l.strip() for l in body.splitlines() if l.strip()), "")
-    # CommonMark fencing: the opening run is 3+ backticks and only a run at least as long closes it, so a target
-    # file that itself contains ``` can be carried inside a ```` block instead of truncating at its first fence.
-    m = re.search(r"(?m)^(`{3,})[\w-]*[ \t]*\n(.*?)\n\1`*[ \t]*$", body, re.S)
+    # CommonMark fencing: the opening run is 3+ backticks (info string may not contain backticks) and only a run
+    # at least as long closes it, so a target file carrying ``` stays intact inside a ```` block.
+    m = re.search(r"(?m)^(`{3,})[^`\n]*\n(.*?)\n\1`*[ \t]*$", body, re.S)
     out = {"fm": p["fm"], "text": text, "errors": list(p["errors"]), "content": None, "retire": first.lower() in ("retire", "退役")}
     if m and not out["retire"]:
         out["content"] = m.group(2) + "\n"
@@ -122,10 +122,14 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
             return 1
     prel = config.rel(cfg, ppath)
     if reject:
-        dst = cfg["proposals_dir"] / "rejected" / ppath.name
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(ppath.read_text(encoding="utf-8").rstrip("\n") + "\n\nrejected: %s · %s\n" % (date.today(), reject), encoding="utf-8")
+        rdir = cfg["proposals_dir"] / "rejected"
+        rdir.mkdir(parents=True, exist_ok=True)
+        dst = ages.unique_dest(rdir, ppath.name)
+        dst.write_text(ppath.read_text(encoding="utf-8").rstrip("\n") + "\n\nrejected: %s · %s\n" % (date.today(), reject),
+                       encoding="utf-8", newline="\n")
         ppath.unlink()
+        from . import index
+        index.build(cfg)                                # leave pending: FTS and playbooks/INDEX.md must stop listing it
         print("rejected → %s" % config.rel(cfg, dst))
         return 0
     p = parse_proposal(ppath)
@@ -163,7 +167,7 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
         return 0
     from . import index, check, report
     index.build(cfg)
-    before = check.run(cfg, expire=False)    # the repo as it stands: what it already carries is not this change's (D81)
+    before = check.run(cfg, expire=False, write_numbers=False)   # D81: existing ERRORs do not block; never dirty 数字.md
     if action == "retire":
         dest.parent.mkdir(exist_ok=True)
         shutil.move(str(target), str(dest))
@@ -171,7 +175,7 @@ def run(cfg, proposal, reject=None, dry_run=False, owner=False):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(p["content"].encode("utf-8"))
     index.build(cfg)
-    r = check.run(cfg, expire=False)
+    r = check.run(cfg, expire=False, write_numbers=False)
     new = new_errors(before["errors"], r["errors"])
     old = len(r["errors"]) - len(new)        # by count, not by equality: two identical findings may split old / new
     if new:

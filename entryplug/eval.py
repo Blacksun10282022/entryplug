@@ -17,13 +17,19 @@ from . import search
 
 
 def run(cfg, goldset, k=10):
-    g = yaml.safe_load(open(goldset, encoding="utf-8")) or {}
+    with open(goldset, encoding="utf-8") as fh:
+        g = yaml.safe_load(fh) or {}
     cases, scope = g.get("cases") or [], g.get("scope", "corpus")
     rows = []
     for c in cases:
         q = c["q"]
         lang = c.get("lang") or ("zh" if CJK.search(" ".join(q) if isinstance(q, list) else q) else "en")
-        res = search.search(cfg, q, scope=c.get("scope", scope), k=k, per_doc=c.get("per_doc", 1))
+        try:
+            res = search.search(cfg, q, scope=c.get("scope", scope), k=k, per_doc=c.get("per_doc", 1),
+                                auto_index=False, check_stale=False)
+        except FileNotFoundError as e:
+            print("eval: %s" % e)
+            return 1
         hits = {r["doc"] for r in res["rows"]} | {r["id"] for r in res["rows"]}
         expect = set(map(str, c.get("expect") or []))
         rec = len(expect & hits) / len(expect) if expect else 0.0

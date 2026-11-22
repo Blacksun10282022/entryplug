@@ -18,7 +18,7 @@ two files across. By hand:
    To keep a single copy you can use a directory junction instead of the mirror (Windows):
    `mklink /J .agents\skills .claude\skills`, then drop the codex skills line from plug.yaml.
 3. MCP: add an `entryplug` entry to Codex's MCP config, command `plug mcp` (cwd = the content repo).
-4. Hooks: `plug init` writes `<content-repo>/.codex/hooks.json` — the sortie-lock recorder, the compaction pin,
+4. Hooks: `plug init` writes `<content-repo>/.codex/hooks.json` — the sortie lock, the compaction pin,
    the SessionStart panel and the Stop record reminder. **Read the next section before editing it by hand.**
 5. Berserk lock: `gates/hooks/pre-commit` → `<content-repo>/.git/hooks/pre-commit`.
    **Codex has no permissions.deny, so prohibition ① has only this one layer here** — the pilot must say so out

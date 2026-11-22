@@ -2,7 +2,7 @@
   "_readme": [
     "Merge into <content-repo>/.claude/settings.json. Replace //c/<content-repo> with the repo's absolute path (on Windows write //<drive>/<path>; paths are normalised to POSIX) and <equipment> with each equipment name registered in plug.yaml.",
     "deny only understands Edit(path) / Read(path): a Write(path) rule is accepted but never checked, so it does nothing. An Edit rule covers every built-in file-editing tool, Write included.",
-    "Never deny Read(self/RULES.md): the pilot has to be able to read the rules. Read() is only for things it should neither read nor change (the hooks' last-fired stamps).",
+    "Never deny Read(self/RULES.md): the pilot has to be able to read the rules. The hook stamps (.kb/hooks/**) are deny-write (Edit), not deny-read, so the pilot can verify gates fired without forging them (D62).",
     "deny rules cover self/ and the equipment registered in plug.yaml. work/, workshop/ and any unregistered directory under tools/ are deliberately left writable — that is where products and new equipment are built.",
     "deny applies in every mode, bypassPermissions included; it cannot stop a script writing directly (native Windows has no sandbox) — the backstop is gates/precommit.py.",
     "These rules bind a session whose project root is this content repo. An agent working from another root edits these files unimpeded and is only stopped at commit time by pre-commit; plug check --contact proves the rules are written, not that they are in force.",
@@ -20,8 +20,9 @@
       "Edit(//c/<content-repo>/tools/<equipment>/dict/**)",
       "Edit(//c/<content-repo>/tools/<equipment>/playbooks/**)",
       "Edit(//c/<content-repo>/tools/<equipment>/materials/**)",
+      "Edit(//c/<content-repo>/tools/<equipment>/kit/**)",
       "Edit(//c/<content-repo>/tools/<equipment>/checks/**)",
-      "Read(//c/<content-repo>/.kb/hooks/**)"
+      "Edit(//c/<content-repo>/.kb/hooks/**)"
     ]
   },
   "hooks": {

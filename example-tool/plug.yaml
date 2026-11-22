@@ -38,6 +38,7 @@ outbound:                       # sortie lock: a hit is a deny decision on stdou
 protected:                      # berserk lock: committing these needs KB_APPROVE=1, which only plug apply sets.
   - self/RULES.md               # Anything under tools/ that is not registered above is NOT protected.
   - self/facts/**
+  - self/style.md
   - tools/**
   - plug.yaml                   # the lock must cover the file that defines it (D71)
 unprotected:                    # the corpus is appended to freely; work/ and workshop/ are the free zones

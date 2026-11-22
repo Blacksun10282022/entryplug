@@ -18,10 +18,11 @@
 # Deps: stdlib subprocess · json; search (to pick a real title as the query).
 import json, os, re, subprocess, sys, time
 from pathlib import Path
-from . import __version__, antigravity, config, trust
+from . import __version__, antigravity, codex, config, shapes, trust
 
 GATES = Path(__file__).resolve().parents[1] / "gates"
 DENY_FILES = (".claude/settings.json", ".claude/settings.local.json")
+codex_posture = codex.posture
 
 
 def harness_version(pilot):
@@ -34,8 +35,11 @@ def harness_version(pilot):
         return "not installed or not on PATH"
 
 
-def _run(args, cwd, env=None, stdin=None):
-    return subprocess.run(args, cwd=str(cwd), env=dict(os.environ, PYTHONIOENCODING="utf-8", **(env or {})), input=stdin,
+def _run(args, cwd, env=None, stdin=None, drop=()):
+    e = dict(os.environ, PYTHONIOENCODING="utf-8", **(env or {}))
+    for k in drop:
+        e.pop(k, None)
+    return subprocess.run(args, cwd=str(cwd), env=e, input=stdin,
                           capture_output=True, text=True, encoding="utf-8", timeout=120)
 
 
@@ -50,8 +54,9 @@ def step_skills(cfg, pilot):
         if not dst.exists() or dst.read_bytes() != src.read_bytes():
             bad.append("%s is not mirrored or is out of date (run plug index; a pilot reading %s must be listed under pilots: in plug.yaml)" % (t["name"], d))
             continue
-        m = re.search(r"^description:\s*(.+)$", src.read_text(encoding="utf-8"), re.M)
-        if not m or len(m.group(1)) > cap:
+        fm, _, _ = shapes.split_frontmatter(src.read_text(encoding="utf-8"))
+        desc = str((fm or {}).get("description") or "").strip()
+        if not desc or len(desc) > cap:
             bad.append("%s description missing or >%s chars, it will be truncated in the list" % (t["name"], format(cap, ",")))
     return (not bad), ("%d manual(s) visible in %s, description not truncated" % (len(cfg["tools"]), d) if not bad else "; ".join(bad))
 
@@ -63,9 +68,10 @@ def probe_query(cfg):
     without a dictionary, not a broken integration, and it must not be reported as one."""
     for t in cfg["tools"]:
         for p in sorted((t["dir"] / "dict").glob("*.md")):
-            m = re.search(r"^title:\s*(.+)$", p.read_text(encoding="utf-8"), re.M)
-            if m and re.search(r"[一-鿿]", m.group(1)):
-                return m.group(1).strip(), "dict"
+            fm, _, _ = shapes.split_frontmatter(p.read_text(encoding="utf-8"))
+            title = str((fm or {}).get("title") or "").strip()
+            if title and re.search(r"[一-鿿]", title):
+                return title, "dict"
     from . import search
     try:
         con = search.open_ro(cfg)
@@ -99,29 +105,6 @@ def step_mcp(cfg):
                    "MCP answers but the Chinese query %r returned 0 (tokenizer or index is broken)" % q)
 
 
-def codex_posture():
-    """Codex's own approval policy and sandbox, read from ~/.codex/config.toml. The sortie lock does block here
-    (D56); these two are the layer on top of it, and worth printing because they decide what happens to everything
-    the outbound list does not name."""
-    p = Path(os.path.expanduser("~/.codex/config.toml"))
-    if not p.exists():
-        return "~/.codex/config.toml not found — check `approval_policy` / `sandbox_mode` yourself"
-    try:
-        t = p.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        return "~/.codex/config.toml unreadable (%s) — check it yourself" % e
-    got = {}
-    for k in ("approval_policy", "sandbox_mode"):
-        m = re.search(r"^\s*%s\s*=\s*[\"\']([^\"\']+)" % k, t, re.M)
-        got[k] = m.group(1) if m else "unset"
-    plain = {"never": "nothing is ever asked", "on-request": "it asks when it wants more", "untrusted": "asks outside trusted commands",
-             "on-failure": "asks only after a sandboxed failure", "danger-full-access": "no sandbox at all",
-             "workspace-write": "may write in the workspace", "read-only": "cannot write"}
-    return "approval_policy=%s (%s) · sandbox_mode=%s (%s)" % (
-        got["approval_policy"], plain.get(got["approval_policy"], "?"),
-        got["sandbox_mode"], plain.get(got["sandbox_mode"], "?"))
-
-
 def step_outbound(cfg, pilot="claude-code"):
     """Probe with the payload shape each pilot really sends (Claude Code includes tool_use_id — D65) and read the
     decision off stdout; the exit code is 0 either way."""
@@ -133,7 +116,8 @@ def step_outbound(cfg, pilot="claude-code"):
         return False, ".plug-off is present, so the sortie lock passes everything through — remove it before testing"
     stamp = cfg["hooks_dir"] / "outbound"
     before = stamp.read_text(encoding="utf-8") if stamp.exists() else None
-    time.sleep(1.05)
+    if before == time.strftime("%Y-%m-%dT%H:%M:%S"):
+        time.sleep(1.05)
     if pilot == "antigravity":                 # D88: its own protocol — toolCall in, {"decision": "deny"} out
         fakes, names = antigravity.fake_calls(cfg["root"]), ("run_command curl", "send_command_input git push", "call_mcp_tool", "mcp_<server>_<tool>")
     else:
@@ -174,15 +158,10 @@ def step_protected(cfg, pilot):
     if not (GATES / "precommit.py").exists():
         return False, "gates/precommit.py not found"
     env = {"PLUG_ROOT": str(root), "PLUG_STAGED": "self/RULES.md"}
-    env.pop("KB_APPROVE", None)
-    r = _run([sys.executable, str(GATES / "precommit.py")], root, env)
+    r = _run([sys.executable, str(GATES / "precommit.py")], root, env, drop=("KB_APPROVE", "GIT_INDEX_FILE"))
     parts, ok = [], r.returncode == 1 and "berserk lock" in r.stderr.lower()
     parts.append("pre-commit refused a fake write to a protected path" if ok else "pre-commit did not refuse (exit %d)" % r.returncode)
-    hook = root / ".git" / "hooks" / "pre-commit"
-    hp = subprocess.run(["git", "config", "core.hooksPath"], cwd=str(root), capture_output=True, text=True).stdout.strip()
-    installed = trust.hook_ok(hook) or \
-                (hp and trust.hook_ok((Path(hp) if os.path.isabs(hp) else root / hp).joinpath("pre-commit")))
-    if not installed:
+    if not trust.hook_ok(trust.precommit_path(root)):
         ok, parts = False, parts + ["but the content repo has no pre-commit hook installed (gates/hooks/pre-commit)"]
     if pilot == "claude-code":
         deny = []
@@ -219,6 +198,6 @@ def run(cfg, pilot):
     print("\n".join(lines))
     np = cfg["numbers_path"]
     if np.parent.exists():
-        with open(np, "a", encoding="utf-8") as f:
+        with open(np, "a", encoding="utf-8", newline="\n") as f:
             f.write("\nfirst contact %s · %s · harness %s: %s\n" % (pilot, time.strftime("%Y-%m-%d"), hv, lines[-1]))
     return 0 if not bad else 1

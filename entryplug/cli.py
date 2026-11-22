@@ -118,7 +118,12 @@ def main(argv=None):
         return mcp.serve(cfg)
     if a.cmd == "hash":
         from . import apply
-        print(apply.blob_hash(open(a.file, "rb").read()))
+        try:
+            with open(a.file, "rb") as fh:
+                print(apply.blob_hash(fh.read()))
+        except OSError as e:
+            print("plug: %s" % e, file=sys.stderr)
+            return 1
         return 0
 
 

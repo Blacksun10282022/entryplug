@@ -83,3 +83,16 @@ def test_contact_reports_a_real_block_on_both_pilots(git_repo):
     assert "the payload shape Claude Code sends" in k.stdout.splitlines()[3]
     posture = contact.codex_posture()
     assert "approval_policy=" in posture or "not found" in posture or "unreadable" in posture
+
+
+def test_contact_strips_ambient_kb_approve_and_measures_multiline_description(git_repo, tmp_path):
+    root = git_repo["root"]
+    install(root)
+    r = plug(root, "check", "--contact", "claude-code", env={"KB_APPROVE": "1"})
+    assert r.returncode == 0 and "④ protected write OK" in r.stdout, r.stdout
+    assert plug(root, "init", "--pilot", "antigravity").returncode == 0
+    skill = root / "tools/sunzi/SKILL.md"
+    skill.write_text("---\nname: sunzi\ndescription: >-\n  " + ("long " * 250) + "\n---\nbody\n", encoding="utf-8", newline="\n")
+    assert plug(root, "index").returncode == 0
+    r = plug(root, "check", "--contact", "antigravity", env={"PLUG_AGY_CONFIG": str(tmp_path)})
+    assert r.returncode == 1 and "① manual visible FAIL" in r.stdout and "1,024" in r.stdout, r.stdout

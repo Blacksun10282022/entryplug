@@ -286,7 +286,7 @@ That copies every `tools/*/SKILL.md` into the user-level skills directory (`~/.c
 
 ```
 entryplug/    cli · config · shapes · index · search · mcp · check · numbers · report · contact · status · apply · eval · init
-              · antigravity (what the machine knows about that pilot)
+              · codex · antigravity (what the machine knows about those pilots)
               (one verb per file, <=250 lines each, no classes and no frameworks)
 gates/        precommit · outbound · precompact · stop + the hook template
 pilots/       claude-code/ (plugin shell · map · deny template) · codex/ (AGENTS.md · hooks · junction notes)

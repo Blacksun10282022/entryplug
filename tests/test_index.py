@@ -207,3 +207,30 @@ def test_index_md_still_names_unchanged_pages(repo):
     assert after.splitlines()[1:] == before.splitlines()[1:]           # only the timestamp line may differ
     idx = (repo["root"] / "tools/sunzi/playbooks/INDEX.md").read_text(encoding="utf-8")
     assert sum(l.startswith("| opponent") for l in idx.splitlines()) == 2
+
+
+def test_stale_detects_exclude_change_playbook_scope_and_mirror_cleanup(repo):
+    from entryplug import config
+    root = repo["root"]
+    # 1. Changing exclude: makes stale() report stale even if walked file count did not move
+    y = root / "plug.yaml"
+    orig_y = y.read_text(encoding="utf-8")
+    y.write_text(orig_y + '\nexclude:\n  - "nonexistent/**"\n', encoding="utf-8", newline="\n")
+    cfg = config.load(root)
+    assert "exclude globs changed" in index.stale(cfg)
+    index.build(cfg)
+    assert not index.stale(cfg)
+    # 2. Pending proposal for another equipment's missing playbook must not leak into sunzi's playbooks/INDEX.md
+    other_pb = root / "proposals/pending/2026-11-22-other-pb.md"
+    other_pb.write_text("---\ntarget: tools/other/playbooks/new-pb.md\nbase: new\nfrom: records/x\n---\n"
+                        "## 改成什么\n```md\nx\n```\n## 为什么\nw\n## 最强反证\nc\n", encoding="utf-8", newline="\n")
+    index.build(cfg)
+    assert "2026-11-22-other-pb" not in (root / "tools/sunzi/playbooks/INDEX.md").read_text(encoding="utf-8")
+    # 3. Removing a tool from plug.yaml cleans up its mirrored skill while leaving hand-written skills untouched
+    custom = root / ".claude/skills/handwritten/SKILL.md"
+    custom.parent.mkdir(parents=True, exist_ok=True)
+    custom.write_text("mine\n", encoding="utf-8")
+    y.write_text(orig_y.replace("tools:\n  - name: sunzi\n    path: tools/sunzi\n    depends: []                 # equipment names this one may link to with [[other-tool/entry]]\n    ttl_days: {default: 90, price: 30, profile: 90}   # material shelf life, by kind\n    unreviewed: 2               # migration reconciliation: how many [?] lines the dictionary should have", "tools: []"),
+                 encoding="utf-8", newline="\n")
+    index.build(config.load(root))
+    assert not (root / ".claude/skills/sunzi").exists() and custom.exists()

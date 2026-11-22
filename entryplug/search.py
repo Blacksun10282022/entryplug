@@ -43,13 +43,21 @@ def term_parts(term):
     return out
 
 
+def _has_member(q, m):
+    if m.isascii():                                     # English / pinyin: case-insensitive + word boundary ("shi" != "shift")
+        if len(m) == 1:
+            return q.lower() == m.lower()
+        return len(m) >= 2 and bool(re.search(r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(m), q, re.I))
+    return (len(m) >= 2 and m in q) or (len(m) == 1 and m == q)
+
+
 def expand(query, groups):
     """Alias expansion: if the query contains any member of a group (>=2 chars, or exactly equals a
     one-character title), add every member of that group."""
     q, extra = query.strip(), []
     for group in groups:
-        if any((len(m) >= 2 and m in q) or (len(m) == 1 and m == q) for m in group):
-            extra += [m for m in group if m not in q]
+        if any(_has_member(q, m) for m in group):
+            extra += [m for m in group if not _has_member(q, m)]
     return extra
 
 
@@ -66,7 +74,7 @@ def fts_query(query, groups):
 def open_ro(cfg):
     if not cfg["index_path"].exists():
         raise FileNotFoundError("no index at %s: run plug index first" % cfg["index"])
-    return sqlite3.connect("file:%s?mode=ro" % cfg["index_path"].as_posix(), uri=True)
+    return sqlite3.connect("file:%s?mode=ro" % cfg["index_path"].as_posix(), uri=True, timeout=10)
 
 
 def dense_candidates(cfg, queries, scope):
@@ -74,9 +82,9 @@ def dense_candidates(cfg, queries, scope):
     return []
 
 
-def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, auto_index=True):
+def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, auto_index=True, check_stale=True):
     from . import index
-    stale = index.stale(cfg)
+    stale = index.stale(cfg) if (auto_index or check_stale) else ""
     if auto_index and stale:                   # D76 remains the ordinary CLI default; read-only callers opt out
         index.build(cfg)
         stale = False
@@ -85,43 +93,48 @@ def search(cfg, queries, scope="tools", tool=None, kind=None, k=8, per_doc=2, au
     queries = [q for q in queries if q and q.strip()]
     k, per_doc = max(1, min(int(k or 8), MAX_K)), max(1, min(int(per_doc or 2), MAX_PER_DOC))
     con = open_ro(cfg)
-    meta = dict(con.execute("select key, value from meta"))
-    groups = [[t] + a for t, a in json.loads(meta.get("aliases", "{}")).items()]
-    titles = json.loads(meta.get("titles", "{}"))
-    where, args = [], []
-    if scope in ("tools", "corpus"):
-        where.append("scope=?"), args.append(scope)
-    if tool:
-        where.append("tool=?"), args.append(tool)
-    if kind:
-        where.append("kind=?"), args.append(kind)
-    lists, used = [], []
-    for q in queries:
-        fq = fts_query(q, groups)
-        if not fq:
-            continue
-        used.append(fq)
-        sql = "select %s from fts where fts match ? %s order by rank limit %d" % (COLS, "".join(" and " + w for w in where), PER_QUERY)
-        lists.append(con.execute(sql, [fq] + args).fetchall())
-    lists.append(dense_candidates(cfg, queries, scope))
-    con.close()
+    try:
+        meta = dict(con.execute("select key, value from meta"))
+        groups = [[t] + a for t, a in json.loads(meta.get("aliases", "{}")).items()]
+        titles = json.loads(meta.get("titles", "{}"))
+        where, args = [], []
+        if scope in ("tools", "corpus"):
+            where.append("scope=?"), args.append(scope)
+        if tool:
+            where.append("tool=?"), args.append(tool)
+        if kind:
+            where.append("kind=?"), args.append(kind)
+        lists, used = [], []
+        for q in queries:
+            fq = fts_query(q, groups)
+            if not fq:
+                continue
+            used.append(fq)
+            sql = "select %s from fts where fts match ? %s order by rank limit %d" % (COLS, "".join(" and " + w for w in where), PER_QUERY)
+            lists.append(con.execute(sql, [fq] + args).fetchall())
+        lists.append(dense_candidates(cfg, queries, scope))
+    finally:
+        con.close()
     merged, seen = [], set()
     for i in range(max((len(l) for l in lists), default=0)):
         for l in lists:
-            if i < len(l) and l[i][0] not in seen:
-                seen.add(l[i][0]), merged.append(l[i])
+            if i < len(l):
+                ckey = (l[i][5], l[i][6], l[i][7])     # (file, lstart, lend): multi-chunk pages and same-stem tools stay distinct
+                if ckey not in seen:
+                    seen.add(ckey), merged.append(l[i])
     per, cands = {}, []
     for r in merged:
-        if per.get(r[1], 0) < per_doc:
-            per[r[1]] = per.get(r[1], 0) + 1
+        dkey = (r[3], r[1])                            # (tool, doc): two equipment carrying SKILL.md keep separate quotas
+        if per.get(dkey, 0) < per_doc:
+            per[dkey] = per.get(dkey, 0) + 1
             cands.append(r)
         if len(cands) >= MAX_CANDIDATES:
             break
-    order = list(dict.fromkeys(r[1] for r in cands[:k]))
-    shown = sorted(cands[:k], key=lambda r: order.index(r[1]))
+    order = list(dict.fromkeys((r[3], r[1]) for r in cands[:k]))
+    shown = sorted(cands[:k], key=lambda r: order.index((r[3], r[1])))
     qtext = " ".join(queries)
     rows = [{"id": r[0], "doc": r[1], "source": r[2], "tool": r[3], "kind": r[4], "file": r[5], "lstart": r[6], "lend": r[7],
-             "pos": r[8], "excerpt": r[9], "title_hit": any(len(q) >= 2 and q in titles.get(r[1], r[2]) for q in queries + expand(qtext, groups))}
+             "pos": r[8], "excerpt": r[9], "title_hit": any(len(q) >= 2 and q.lower() in titles.get(r[1], r[2]).lower() for q in queries + expand(qtext, groups))}
             for r in shown]
     res = {"rows": rows, "shown": len(rows), "total": len(cands), "queries": used, "scope": scope, "built_at": meta.get("built_at")}
     if stale:

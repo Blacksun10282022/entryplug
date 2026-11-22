@@ -209,3 +209,23 @@ def test_apply_refuses_a_target_under_dot_git(git_repo):
         r = plug(root, "apply", str(p.relative_to(root)), *extra)
         assert r.returncode == 1 and "under .git/" in r.stdout, (extra, r.stdout)
     assert p.exists()
+
+
+def test_apply_rollback_does_not_dirty_numbers_and_reject_reindexes(git_repo):
+    from entryplug import search
+    root = git_repo["root"]
+    assert not git_repo["numbers_path"].exists()
+    bad = proposal(root, "2026-08-29-bad2.md", "tools/sunzi/dict/bad2.md", "new", entry("坏词2", "b1, b2", "[[不存在]]"))
+    assert plug(root, "apply", str(bad.relative_to(root))).returncode == 1
+    assert not git_repo["numbers_path"].exists(), "apply must not dirty self/数字.md on rollback"
+    p = proposal(root, "2026-08-29-rej.md", "tools/sunzi/dict/shi.md", "3d42b9a9", "```c++\nbody\n```")
+    p.write_text(p.read_text(encoding="utf-8").replace("## 为什么\nw", "## 为什么\n待拒独特词gamma"), encoding="utf-8", newline="\n")
+    assert plug(root, "index").returncode == 0
+    assert search.search(git_repo, "待拒独特词gamma", scope="proposals", auto_index=False)["total"] == 1
+    existing = root / "proposals/rejected/2026-08-29-rej.md"
+    existing.write_text("keep me\n", encoding="utf-8", newline="\n")
+    assert plug(root, "apply", str(p.relative_to(root)), "--reject", "不需要").returncode == 0
+    assert existing.read_text(encoding="utf-8") == "keep me\n"
+    moved = root / "proposals/rejected/2026-08-29-rej-2.md"
+    assert moved.exists() and b"\r\n" not in moved.read_bytes()
+    assert search.search(git_repo, "待拒独特词gamma", scope="proposals", auto_index=False)["total"] == 0

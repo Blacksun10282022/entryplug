@@ -16,8 +16,8 @@
 #       shapes.outcome_owed: past its `due` day, or 30 days old when it has none — exactly what check warns about.
 #       The Chinese literals below are content vocabulary (record sections and the owner's own wording), not prose.
 # Deps: stdlib (subprocess only to ask git) · shapes (split_frontmatter · rule_refs · outcome_owed).
-import math, re, subprocess
-from . import __version__, shapes
+import io, math, re, subprocess
+from . import __version__, ages, shapes
 
 AGREE_PREFIX = ("同意", "同 ", "按它", "按 verdict")
 RIGHT_MARKERS = {"它对": "it was right", "我对": "I was right", "说不清": "unclear"}
@@ -35,16 +35,37 @@ def wilson(k, n):
     return round(100 * (c - h)), round(100 * (c + h))
 
 
+def first_versions(root, rels, commits=None):
+    """Full text of each file as git first saw it, read in ONE `git cat-file --batch` call; None when untracked."""
+    rels = list(dict.fromkeys(rels))
+    if not rels:
+        return {}
+    commits = ages.git_first(root)[1] if commits is None else commits
+    want = [(rel, commits[rel]) for rel in rels if rel in commits]
+    out = {rel: None for rel in rels}
+    if not want:
+        return out
+    specs = "".join("%s:%s\n" % (sha, rel) for rel, sha in want).encode("utf-8")
+    try:
+        r = subprocess.run(["git", "cat-file", "--batch"], cwd=str(root), input=specs, capture_output=True)
+    except OSError:
+        return out
+    if r.returncode != 0:
+        return out
+    buf = io.BytesIO(r.stdout)
+    for rel, _ in want:
+        hdr = buf.readline()
+        parts = hdr.decode("utf-8", errors="replace").strip().split()
+        if len(parts) == 3 and parts[1] == "blob" and parts[2].isdigit():
+            raw = buf.read(int(parts[2]))
+            buf.read(1)                                 # trailing newline after blob payload
+            out[rel] = raw.decode("utf-8", errors="replace")
+    return out
+
+
 def first_version(root, rel):
     """The full text of a file as git first saw it; None when it is not in git."""
-    try:
-        sha = subprocess.run(["git", "log", "--diff-filter=A", "--format=%H", "--", rel], cwd=str(root),
-                             capture_output=True, text=True, encoding="utf-8").stdout.split()
-        if not sha:
-            return None
-        return subprocess.run(["git", "show", "%s:%s" % (sha[-1], rel)], cwd=str(root), capture_output=True, text=True, encoding="utf-8").stdout
-    except OSError:
-        return None
+    return first_versions(root, [rel]).get(rel)
 
 
 def agrees(fm):
@@ -63,16 +84,30 @@ def ratio(k, n, pct=True):
     return "%d/%d  %d%% [%d,%d]" % (k, n, round(100 * k / n), lo, hi)
 
 
-def tool_stats(cfg, recs, docs, anchors, rule_ids, today):
+def _who_right(outcome):
+    """Pick at most one RIGHT_MARKERS bucket per record (the last marker mentioned, so a sentence like
+    '起初以为我对，事后证明它对' never double-counts)."""
+    best, pos = None, -1
+    for k in RIGHT_MARKERS:
+        hits = [outcome.rfind(k)] + ([outcome.rfind("你对")] if k == "我对" else [])
+        p = max(hits)
+        if p > pos:
+            best, pos = k, p
+    return best
+
+
+def tool_stats(cfg, recs, docs, anchors, rule_ids, today, firsts=None):
     s = {"n": len(recs), "unanswered": 0, "pending": 0, "valid": 0, "nonblind": 0, "untracked": 0, "agree": 0,
          "right": {k: 0 for k in RIGHT_MARKERS}, "q_ok": 0, "q_all": 0, "r_ok": 0, "r_all": 0, "four": 0, "cite": 0}
+    if firsts is None:
+        firsts = first_versions(cfg["root"], [r["rel"] for r in recs if str(r["fm"].get("chosen") or "").strip()])
     for r in recs:
         fm, basis = r["fm"], r["sections"].get("依据", "")
         chosen, outcome = str(fm.get("chosen") or "").strip(), str(fm.get("outcome") or "").strip()
         s["unanswered"] += not chosen
         s["pending"] += shapes.outcome_owed(fm, r["age"], today)     # what check warns about, due or outcome (D86)
         if chosen:
-            v = first_version(cfg["root"], r["rel"])
+            v = firsts.get(r["rel"])
             if v is None:
                 s["untracked"] += 1
             else:
@@ -83,13 +118,13 @@ def tool_stats(cfg, recs, docs, anchors, rule_ids, today):
                 else:
                     s["nonblind"] += 1
             if not agrees(fm) and outcome:
-                for k in s["right"]:
-                    if k in outcome or (k == "我对" and "你对" in outcome):
-                        s["right"][k] += 1
+                who = _who_right(outcome)
+                if who:
+                    s["right"][who] += 1
         for m in RE_QUOTE.finditer(r["body"]):
             doc, q = m.group(1) or m.group(3) or m.group(5), m.group(2) or m.group(4) or m.group(6)
             s["q_all"] += 1
-            s["q_ok"] += any(re.sub(r"\s+", "", q) in re.sub(r"\s+", "", t) for t in docs.get(doc, []))
+            s["q_ok"] += any(re.sub(r"\s+", "", q) in t for t in docs.get(doc, []))
         for a in set(re.findall(r"\^p\d+", r["body"])):
             s["q_all"] += 1
             s["q_ok"] += a in anchors
@@ -97,15 +132,20 @@ def tool_stats(cfg, recs, docs, anchors, rule_ids, today):
             s["r_all"] += 1
             s["r_ok"] += rid in rule_ids
         sec = r["sections"]
-        s["four"] += all(sec.get(h, "").strip() for h in ("依据", "最强反证", "什么会改判")) and ("上次" in basis or "records/" in basis)
+        s["four"] += all(sec.get(h, "").strip() for h in ("依据", "最强反证", "什么会改判")) and (
+            "上次" in basis or "records/" in basis or "无类似记录" in basis)
         s["cite"] += "records/" in basis
     return s
 
 
-def page(cfg, records, today, docs=None, anchors=None, rule_ids=None):
-    docs, anchors, rule_ids = docs or {}, anchors or set(), rule_ids or set()
-    tools = [t["name"] for t in cfg["tools"]] or sorted({r["fm"].get("tool") for r in records})
-    stats = {t: tool_stats(cfg, [r for r in records if r["fm"].get("tool") == t], docs, anchors, rule_ids, today) for t in tools}
+def page(cfg, records, today, docs=None, anchors=None, rule_ids=None, commits=None):
+    docs_norm = {k: [re.sub(r"\s+", "", t) for t in v] for k, v in (docs or {}).items()}
+    anchors, rule_ids = anchors or set(), rule_ids or set()
+    known = [t["name"] for t in cfg["tools"]]
+    extra = sorted({str(r["fm"].get("tool")) for r in records if r["fm"].get("tool")} - set(known))
+    tools = known + extra
+    firsts = first_versions(cfg["root"], [r["rel"] for r in records if str(r["fm"].get("chosen") or "").strip()], commits)
+    stats = {t: tool_stats(cfg, [r for r in records if str(r["fm"].get("tool") or "") == t], docs_norm, anchors, rule_ids, today, firsts) for t in tools}
     head = "# Sync rate (numbers page) · %s · machine entryplug %s · records %d (%s) · unanswered %d · outcome pending %d" % (
         today, __version__, len(records), " · ".join("%s %d" % (t, stats[t]["n"]) for t in tools) or "no equipment",
         sum(s["unanswered"] for s in stats.values()), sum(s["pending"] for s in stats.values()))

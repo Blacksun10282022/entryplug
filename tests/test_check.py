@@ -238,3 +238,51 @@ def test_untracked_equipment_check_is_skipped_not_executed(git_repo):
     r = run(git_repo)
     assert any(f["code"] == "tool_check" and "uncommitted" in f["msg"] for f in r["warnings"]), codes(r, "warnings")
     assert not any("edited but not committed" in f["msg"] for f in r["warnings"] + r["errors"])
+
+
+def test_check_catches_unindexed_corpus_material_date_expires_kit_and_corrupt_files(repo):
+    root = repo["root"]
+    # 1. Brand-new unindexed corpus file must mark index_stale=True in check.run()
+    (root / "tools/sunzi/corpus/raw/brand-new.md").write_text("brand new corpus\n", encoding="utf-8", newline="\n")
+    r = check.run(repo, expire=False, tool_checks=False, today=TODAY)
+    assert r["header"]["index_stale"] and "index_stale" in codes(r, "warnings")
+    # 2. Material without filename date prefix uses frontmatter `date` (D11); `expires` overrides TTL; kit/ does not TTL-expire
+    m1 = root / "tools/sunzi/materials/no-prefix.md"
+    m1.write_text("---\ndate: 2024-01-01\nkind: price\n---\nold\n", encoding="utf-8", newline="\n")
+    m2 = root / "tools/sunzi/materials/2026-08-28-explicit-exp.md"
+    m2.write_text("---\ndate: 2026-08-28\nkind: profile\nexpires: 2026-08-20\n---\nexp\n", encoding="utf-8", newline="\n")
+    kit = root / "tools/sunzi/kit/2020-01-01-static.md"
+    kit.parent.mkdir(parents=True, exist_ok=True)
+    kit.write_text("# Static ref\nbody\n", encoding="utf-8", newline="\n")
+    # 3. Corrupt hook stamp & corrupt sqlite index warn cleanly instead of raising
+    repo["hooks_dir"].mkdir(parents=True, exist_ok=True)
+    (repo["hooks_dir"] / "stop").write_text("corrupt-stamp", encoding="utf-8")
+    repo["index_path"].write_bytes(b"not a sqlite file")
+    # 4. Expired proposal moved by check disappears from report's pending list and never overwrites an existing rejected file
+    old = root / "proposals/pending/2026-06-01-old.md"
+    old.write_text("---\ntarget: tools/sunzi/dict/shi.md\nbase: new\nfrom: records/x\n---\n## 改成什么\nx\n## 为什么\ny\n## 最强反证\nz\n", encoding="utf-8")
+    existing_rej = root / "proposals/rejected/2026-06-01-old.md"
+    existing_rej.write_text("earlier rejected\n", encoding="utf-8")
+    r = check.run(repo, expire=True, tool_checks=False, today=TODAY)
+    exp_files = {w["file"] for w in r["warnings"] if w["code"] == "expired"}
+    assert "tools/sunzi/materials/no-prefix.md" in exp_files and "tools/sunzi/materials/2026-08-28-explicit-exp.md" in exp_files
+    assert "tools/sunzi/kit/2020-01-01-static.md" not in exp_files
+    assert any(w["code"] == "hook" and "unreadable stamp" in w["msg"] for w in r["warnings"])
+    assert r["header"]["index_stale"]
+    assert existing_rej.read_text(encoding="utf-8") == "earlier rejected\n"
+    assert (root / "proposals/rejected/2026-06-01-old-2.md").exists()
+    rep = report.report(repo, r)
+    assert "plug apply proposals/pending/2026-06-01-old.md" not in rep
+
+
+def test_numbers_d30_bare_marker_unregistered_tool_and_no_double_count(repo):
+    root = repo["root"]
+    rec = root / "self/records/2026-08-28-extra.md"
+    rec.write_text("---\ntool: general\nby: codex · gpt-5 · 2026-08-28\nsituation: s\nverdict: 推荐 A\nchosen: B\n"
+                   "outcome: 起初以为我对，事后证明它对\n---\n## 依据\n无类似记录\n## 最强反证\nb\n## 什么会改判\nc\n",
+                   encoding="utf-8", newline="\n")
+    r = check.run(repo, expire=False, tool_checks=False, today=TODAY)
+    page = r["numbers"]
+    assert "| metric | sunzi | general |" in page, page
+    assert "it was right 1 · I was right 0 · unclear 0" in page, page
+    assert "| four elements present | 3/3 | 1/1 |" in page, page

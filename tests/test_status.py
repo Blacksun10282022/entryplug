@@ -196,3 +196,28 @@ def test_plug_status_reports_a_due_record_and_writes_nothing(repo):
     r = plug(root, "status")
     assert "[--] Records due ........ 1 due, no outcome yet: 2026-07-20-supplier-delay" in r.stdout, r.stdout
     assert tree() == before
+
+
+def test_brief_keeps_sortie_lock_ng_when_berserk_lock_is_ok():
+    """Berserk lock and Sortie lock share one line; brief() used to filter by startswith('[NG]') and silently dropped
+    Sortie lock's [NG] reason whenever Berserk lock was [OK]."""
+    text = "\n".join([
+        "ENTRY PLUG — INSERTION SEQUENCE",
+        "[OK] LCL pressure ....... index.sqlite (38 docs, 3ms)",
+        "[OK] Berserk lock ....... armed          [NG] Sortie lock ... Antigravity plugin is switched off",
+        "SYNC RATE 83.3% — PATTERN ORANGE: the sortie lock degraded; run plug init --pilot both",
+    ])
+    b = status.brief(text)
+    assert "[NG] Sortie lock ... Antigravity plugin is switched off" in b and "[OK]" not in b, b
+
+
+def test_antigravity_only_repo_reaches_nominal(git_repo, tmp_path):
+    """Codex-only and Antigravity-only installs have no Claude Code deny layer by design; AT-Field checks pre-commit."""
+    root = git_repo["root"]
+    agy = tmp_path / "agyconfig"
+    agy.mkdir()
+    assert plug(root, "init", "--pilot", "antigravity").returncode == 0
+    assert plug(root, "index").returncode == 0
+    r = plug(root, "status", env={"PLUG_AGY_CONFIG": str(agy)})
+    assert r.returncode == 0 and "SYNC RATE 100.0% — ALL SYSTEMS NOMINAL." in r.stdout, r.stdout
+    assert "no deny layer (pre-commit only) · pre-commit armed" in r.stdout, r.stdout

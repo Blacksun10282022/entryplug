@@ -153,3 +153,18 @@ def test_switched_off_plugin_and_unnamed_shell_tool_are_reported(git_repo, tmp_p
     assert msg and "no outbound rule names run_command or send_command_input" in msg, msg
     s = plug(root, "status", env=on)
     assert "[NG] Sortie lock" in s.stdout and "run_command" in s.stdout, s.stdout
+
+
+def test_manage_task_send_input_is_gated_and_partial_shell_rule_warns(git_repo, tmp_path):
+    root = git_repo["root"]
+    assert plug(root, "init", "--pilot", "antigravity").returncode == 0
+    # Antigravity 2.0's manage_task(Action="send_input") reaches the shell; list/status do not
+    denied = gate(call("manage_task", {"Action": "send_input", "TaskId": "t1", "Input": "git push origin main\n"}, root), root)
+    assert antigravity.denied(denied.stdout), denied.stdout + denied.stderr
+    quiet = gate(call("manage_task", {"Action": "list"}, root), root)
+    assert quiet.returncode == 0 and not quiet.stdout.strip()
+    # Missing run_command on just ONE Bash rule is caught instead of passing via any()
+    y = root / "plug.yaml"
+    y.write_text(y.read_text(encoding="utf-8").replace("|run_command|send_command_input)$", ")$", 1), encoding="utf-8")
+    msg = antigravity.problem(config.load(root), conf=agy_env(tmp_path)["PLUG_AGY_CONFIG"])
+    assert msg and "not every shell outbound rule names run_command" in msg, msg

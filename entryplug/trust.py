@@ -14,6 +14,17 @@ from pathlib import Path
 from . import config
 
 
+def precommit_path(root):
+    """Where git expects this repo's pre-commit hook (honours core.hooksPath)."""
+    hp = ""
+    try:
+        hp = subprocess.run(["git", "config", "core.hooksPath"], cwd=str(root), capture_output=True, text=True).stdout.strip()
+    except OSError:
+        pass
+    base = (Path(hp) if os.path.isabs(hp) else Path(root) / hp) if hp else Path(root) / ".git" / "hooks"
+    return base / "pre-commit"
+
+
 def hook_ok(path):
     """Is this pre-commit file the berserk lock and nothing else? The hook plug init writes has exactly one
     executable line, `exec <python> <gates/precommit.py>`, and that script must exist."""

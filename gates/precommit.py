@@ -33,7 +33,7 @@ def staged(root):
     env = os.environ.get("PLUG_STAGED")
     if env is not None and "GIT_INDEX_FILE" not in os.environ:
         return [l.strip().replace("\\", "/") for l in env.splitlines() if l.strip()]
-    r = subprocess.run(["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRD"], cwd=str(root),
+    r = subprocess.run(["git", "diff", "--cached", "--name-only", "-z", "--no-renames", "--diff-filter=ACMRD"], cwd=str(root),
                        capture_output=True, text=True, encoding="utf-8")
     return [l for l in r.stdout.split("\0") if l.strip()]
 
@@ -67,6 +67,24 @@ def protection_policy(cfg):
     return policy
 
 
+def staged_area(cfg, rel):
+    """Classify one staged path as record / proposal without walking the whole repo (D75)."""
+    rp = str(rel).replace("\\", "/").removeprefix("./")
+    if not rp.lower().endswith(".md") or config.excluded(cfg, rp):
+        return None
+    norm = (lambda s: s.lower()) if os.name == "nt" else (lambda s: s)
+    cmp = norm(rp)
+    rec = norm(cfg["records_dir"].relative_to(cfg["root"]).as_posix().rstrip("/") + "/")
+    if cmp.startswith(rec) and "/" not in cmp[len(rec):]:
+        return "record"
+    prop = norm(cfg["proposals_dir"].relative_to(cfg["root"]).as_posix().rstrip("/") + "/")
+    if cmp.startswith(prop):
+        tail = cmp[len(prop):]
+        if "/" in tail and tail.split("/", 1)[0] in config.PROPOSAL_DIRS:
+            return "proposal"
+    return None
+
+
 def main():
     for s in (sys.stdout, sys.stderr):
         s.reconfigure(encoding="utf-8")
@@ -85,12 +103,12 @@ def main():
               "through a refit request (proposals/pending/); the owner approves with plug apply" % (hit[0], more), file=sys.stderr)
         return 1
     from entryplug import shapes                 # D75: the hook refuses, it does not rebuild or check up
-    known = {f["rel"]: f for f in config.walk(cfg)}
     bad = []
     for rel in files:
-        f = known.get(rel)
-        if f and f["area"] in ("record", "proposal") and f["path"].exists():
-            bad += ["%s · %s" % (rel, e) for e in shapes.parse_file(f["path"].read_text(encoding="utf-8"), f["area"])["errors"]]
+        area = staged_area(cfg, rel)
+        p = cfg["root"] / rel
+        if area and p.is_file():
+            bad += ["%s · %s" % (rel, e) for e in shapes.parse_file(p.read_text(encoding="utf-8"), area)["errors"]]
     if bad:
         print("shape error, commit refused: %s%s — fix the file; plug check explains the shape" %
               (bad[0], " (%d in total)" % len(bad) if len(bad) > 1 else ""), file=sys.stderr)

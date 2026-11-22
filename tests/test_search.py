@@ -164,3 +164,34 @@ def test_long_sentence_finds_a_two_character_term_split_into_single_characters(r
     res = search.search(repo, "我想找那座灯塔守夜的人", auto_index=False)
     assert "shi" in ids(res), (res["total"], res["queries"])                    # D22 alone: 0 hits from 我想 / 那座 / 守夜
     assert '"灯塔"' in res["queries"][0].split(" OR ")
+
+
+def test_multi_chunk_non_corpus_and_two_equipment_skills_are_not_dropped(repo):
+    """Non-corpus chunks share a stem id; deduping by (file, lstart, lend) keeps multiple matching sections of one
+    proposal and keeps two equipment carrying SKILL.md from dropping the second one."""
+    from entryplug import config, index
+    root = repo["root"]
+    prop = root / "proposals/pending/2026-11-22-two-sec.md"
+    prop.write_text("---\ntarget: tools/sunzi/dict/shi.md\nbase: new\nfrom: records/x\n---\n"
+                    "## 改成什么\n```md\nx\n```\n## 为什么\n双块测试词alpha在为什么\n## 最强反证\n双块测试词alpha在最强反证\n",
+                    encoding="utf-8", newline="\n")
+    other = root / "tools/other/SKILL.md"
+    other.parent.mkdir(parents=True)
+    other.write_text("---\nname: other\ndescription: second tool\n---\n两件装备共用技能词beta\n", encoding="utf-8", newline="\n")
+    s1 = root / "tools/sunzi/SKILL.md"
+    s1.write_text(s1.read_text(encoding="utf-8") + "\n两件装备共用技能词beta\n", encoding="utf-8", newline="\n")
+    y = root / "plug.yaml"
+    y.write_text(y.read_text(encoding="utf-8").replace("    unreviewed: 2", "    unreviewed: 2\n  - name: other\n    path: tools/other"),
+                 encoding="utf-8", newline="\n")
+    cfg = config.load(root)
+    index.build(cfg)
+    both = search.search(cfg, "双块测试词alpha", scope="proposals", k=10, per_doc=5, auto_index=False)["rows"]
+    assert len(both) == 2 and both[0]["lstart"] != both[1]["lstart"], both
+    skills = search.search(cfg, "两件装备共用技能词beta", scope="tools", k=10, per_doc=1, auto_index=False)["rows"]
+    assert {r["file"] for r in skills} == {"tools/sunzi/SKILL.md", "tools/other/SKILL.md"}, skills
+
+
+def test_ascii_alias_expansion_is_case_insensitive_with_word_boundaries():
+    groups = [["势", "momentum", "shi"]]
+    assert set(search.expand("Momentum", groups)) == {"势", "shi"}
+    assert search.expand("shift finish fashion", groups) == []

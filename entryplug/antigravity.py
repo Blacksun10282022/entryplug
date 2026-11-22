@@ -23,9 +23,10 @@ SKILLS, USER_SKILLS = ".agents/skills", "~/.gemini/config/skills"
 # The tools that put a command line into a shell, and the argument holding the text that runs: run_command starts
 # one, send_command_input types into one already running — a second door to the same shell, so it is gated too.
 SHELL_TOOLS = {"run_command": "CommandLine", "send_command_input": "Input"}
+TASK_INPUT = "manage_task"                   # Antigravity 2.0: Action="send_input" + Input types into a running command
 MCP_CALL = "call_mcp_tool"                   # an MCP call by name: args ServerName · ToolName · Arguments
 MCP_DIRECT = "mcp_"                          # …or the MCP tool itself, offered as mcp_<server>_<tool>
-MATCHER = "run_command|send_command_input|call_mcp_tool|mcp_.*"   # what the sortie lock has to see here (D88)
+MATCHER = "run_command|send_command_input|manage_task|call_mcp_tool|mcp_.*"   # what the sortie lock has to see here (D88)
 DESC_MAX = 1024                              # Antigravity's cap on a skill description (Claude Code's is 1,536)
 
 
@@ -60,6 +61,10 @@ def tool_call(data):
     name, args = str(tc.get("name") or ""), tc.get("args") if isinstance(tc.get("args"), dict) else {}
     if isinstance(args.get(SHELL_TOOLS.get(name, "")), str):
         return name, {"command": args[SHELL_TOOLS[name]]}
+    if name == TASK_INPUT:
+        if args.get("Action") == "send_input" and isinstance(args.get("Input"), str):
+            return "send_command_input", {"command": args["Input"]}
+        return name, {}                                 # list / status / kill are not shell input
     if name == MCP_CALL:
         return "mcp__%s__%s" % (args.get("ServerName") or "", args.get("ToolName") or ""), args
     if name.startswith(MCP_DIRECT) and not name.startswith("mcp__"):
@@ -106,6 +111,10 @@ def problem(cfg, conf=None):
     unnamed = [t for t in SHELL_TOOLS if not any(_names(r, t) for r in cfg["outbound"])]
     if unnamed:
         return "armed for Claude Code and Codex; no outbound rule names %s, so what Antigravity runs through it matches nothing — add it to the shell rules in plug.yaml" % " or ".join(unnamed)
+    bash_rules = [r for r in cfg["outbound"] if _names(r, "Bash")]
+    partial = [t for t in SHELL_TOOLS if bash_rules and not all(_names(r, t) for r in bash_rules)]
+    if partial:
+        return "armed for Claude Code and Codex; not every shell outbound rule names %s, so some Antigravity commands pass unchecked — add it to every shell rule in plug.yaml" % " or ".join(partial)
     return None
 
 
