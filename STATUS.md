@@ -6,7 +6,7 @@ The entire machine (CLI, read-only MCP server, all hooks/gates, cross-pilot trac
 
 - **Verified on `example-tool` (`cargo test --offline`)**: 6/6 integration, architecture-ratchet, and public-repo no-leak suites PASS in ~6.2 s (0 compiler warnings); public 50-case `bench/public/goldset-sunzi.yaml` holds **0.98 recall@10** (`zh 0.96`, `en 1.00`) with pure CJK 2-gram + lowercased ASCII + standalone `aliases:`.
 - **Schema v2 & locks**: normalized SQLite (`.kb/state.sqlite` + optional cold `.kb/books.sqlite`), Active-Heads `index.md` capped under 50 KB, unified `PreToolUse` Worktree Berserk Lock + Sortie Lock across Claude Code, Codex, and Antigravity, exact `PreToolUse` matcher drift detection + `Worktree` status layer, `PostToolUse` concurrent WAL hot-indexing + `.kb/blind.jsonl` pre-reveal commitment + fast ellipsis-tolerant quote verification, Unified Diff `plug apply`, `plug trace sync`, `plug gate prompt`, and `plug review`.
-- **Live session re-verification (MANUAL C1.2 / C2.3 / C3.3 / C4.4 / C4.6)**: pending deployment cutover in the owner's active content repo.
+- **Live three-pilot verification (2026-11-25)**: deployed on the owner's live content repo across Claude Code `2.1.331`, `codex-cli 0.167.2`, and Antigravity `1.5.13` — `plug check --contact` passed 4/4 on all three pilots, `plug status` reached `SYNC RATE 100.0%` (`state.sqlite` query ~5–8 ms), and `plug check --no-expire` reported 0 ERROR. Also fixed frontmatter raw `base:` preservation so all-digit-plus-`e` git short hashes (e.g. `260048e4`) are not parsed as YAML scientific-notation floats.
 
 ---
 

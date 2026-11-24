@@ -29,7 +29,7 @@ entryplug is the plug that lets a coding agent work from one person's written ju
 Three things are measured, three separate ways, and never mixed into one number:
 
 - Retrieval runs against a **public gold set** of 50 cases anyone can rerun: recall@10 is 0.98 (Chinese 0.96, English 1.00).
-- The two locks pass the **acceptance script**: 24 items run automated, and 4 more are verified by hand in a live pilot.
+- The locks, gates, concurrency, and no-leak ratchets run in `cargo test --offline` (6/6 Rust integration & ratchet suites, plus live 4-step `plug check --contact` across Claude Code, Codex, and Antigravity).
 - A **private blind benchmark** runs on the owner's own situations, registered as hashes: the equipped answer was the blind pick on all six situations for each of four different pilots (95% interval 0.61 to 1.00).
 
 ## What it does (all of it is in the machine; the content is never here)
@@ -47,11 +47,11 @@ Three things are measured, three separate ways, and never mixed into one number:
 | `plug eval` / `plug hash` | gold-set recall@10 (YAML or Markdown tables; zero Chinese recall is an ERROR) and local git-blob 8-char short hash |
 | `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | idempotently wires `pre-commit`, Claude `.claude/settings.json` + `.mcp.json`, Codex `.codex/hooks.json` + `.codex/config.toml`, Antigravity `.agents/plugins/entryplug/`, embedded maps (when absent), skill mirrors, and `work/` + `workshop/` |
 
-Two prohibitions are enforced by `gates/`, not by prompting.
+Two prohibitions are enforced by built-in native hooks (`plug gate`), not by prompting.
 
-The **berserk lock** (do not change the rules or the equipment, do not build new equipment; write a refit request instead) is a git pre-commit hook plus Claude Code deny rules. Know what the deny half is worth: the rules live in `<content-repo>/.claude/settings.json` and bind a session whose **project root is that repo**. An agent working from somewhere else, another project or a machine repo or a scratch directory, edits those files with nothing in its way, and only pre-commit stops the result from landing. That is why pre-commit is the hard layer and deny is the polite one. It reads the protection policy from `git show HEAD:plug.yaml`, so widening `unprotected:` in the working tree and leaving it unstaged buys nothing (audit 2026-09-07, X-01); with no plug.yaml in HEAD it falls back to the working tree and says so on stderr. Hard is not airtight: `--no-verify` and `KB_APPROVE=1` are the two documented ways round it, both leave a trace, and both are the owner's to use.
+The **berserk lock** (do not change the rules or the equipment, do not build new equipment; write a Unified Diff refit request instead) is enforced at three points: a unified `PreToolUse` worktree lock (`plug gate pretool`, covering file-edit tools, shell writes, and `.kb/hooks/**` across Claude Code, Codex, and Antigravity), Claude Code `permissions.deny`, and a git `pre-commit` hook (`plug gate precommit`). It reads the protection policy from `git show HEAD:plug.yaml`, so widening `unprotected:` in the working tree and leaving it unstaged buys nothing (audit 2026-09-07, X-01); with no `plug.yaml` in `HEAD` it falls back to the working tree and says so on stderr. Hard is not airtight: `--no-verify` and `KB_APPROVE=1` are the two documented ways round it, both leave a trace, and both are the owner's to use.
 
-The **sortie lock** (nothing goes out in the owner's name; ask first) is a PreToolUse hook, one list shared by Claude Code, Codex and Antigravity. It is a tripwire for the common outbound write commands, not a sandbox: reads pass (curl/wget without a write method, WebFetch, reading mail), the listed write forms are refused (curl/wget with a write method or upload, PowerShell -Method Post/-Body, Python requests.post/httpx/smtplib, ssh/scp/sendmail, git push, gh, Artifact, MCP send/reply/forward/submit/pay/publish), and anything outside the list is not seen by it: arbitrary code that writes to the network, and browser clicks (audit 2026-09-07, X-02). The decision is one JSON line on stdout from a process that exits 0: `hookSpecificOutput.permissionDecision: "deny"` with a non-empty `permissionDecisionReason`, verified live on each pilot (D65). The hook is wired to every tool that can run a command or publish: Bash, PowerShell, WebFetch, Artifact and all MCP tools. Codex's own `approval_policy` and `sandbox_mode` sit on top as a second layer; `plug check --contact codex` prints both so you can see what else is or is not in the way. Antigravity speaks its own hook protocol: the same script recognises it by the payload's shape and answers `{"decision": "deny", "reason": …}`, the hook sees its two doors into a shell (`run_command`, `send_command_input`, both of which the list has to name) and every MCP call, renamed `mcp__…` so the MCP rule written for the other two applies (D88). Plus a compaction pin and a Stop-hook record reminder, both reminder-level; Antigravity has neither, and no deny layer a repo can carry, by decision (D90).
+The **sortie lock** (nothing goes out in the owner's name; ask first) runs inside the same `plug gate pretool` hook, one list shared by Claude Code, Codex, and Antigravity. It is a tripwire for the common outbound write commands, not a sandbox: reads pass (curl/wget without a write method, WebFetch, reading mail), the listed write forms are refused (curl/wget with a write method or upload, PowerShell -Method Post/-Body, Python requests.post/httpx/smtplib, ssh/scp/sendmail, git push, gh, Artifact, MCP send/reply/forward/submit/pay/publish), and anything outside the list is not seen by it: arbitrary code that writes to the network, and browser clicks (audit 2026-09-07, X-02). The decision is one JSON line on stdout from a process that exits 0 (`hookSpecificOutput.permissionDecision: "deny"` on Claude/Codex, `{"decision": "deny", "reason": …}` on Antigravity; D65, D88). Codex's own `approval_policy` and `sandbox_mode` sit on top as a second layer; `plug check --contact codex` prints both. Antigravity's shell tools (`run_command`, `send_command_input`, `manage_task(send_input)`) and MCP calls (`call_mcp_tool` / `mcp_*`) are normalised in `src/pilots/mod.rs`. Plus a compaction pin (`plug gate precompact`) and a once-per-session Stop-hook record reminder (`plug gate stop`) on Claude Code and Codex.
 
 ## Why this exists
 
@@ -80,7 +80,7 @@ cargo test --offline        # C0-C4 acceptance, v2 gates/concurrency/diffs, LOC 
 
 `plug search` covers the dictionary, the playbooks and the records by default; the corpus needs `--scope corpus` (`scope=corpus` over MCP). With no hits the tail line says which scope was searched and when the index was built; with no index it says so and exits 1.
 
-That is the machine running on the example. To run it on your own judgment, build your own Base (next section). Integration details are in `pilots/claude-code/`, `pilots/codex/` and `pilots/antigravity/`, the gates in `gates/README.md`, the shapes in `docs/SHAPES.md`, and every call made along the way in `docs/DECISIONS.md`.
+That is the machine running on the example. To run it on your own judgment, build your own Base (next section). Integration templates are in `pilots/claude-code/`, `pilots/codex/` and `pilots/antigravity/`, the native gates in `src/gates/mod.rs`, the shapes in `docs/SHAPES.md`, and every call made along the way in `docs/DECISIONS.md`.
 
 ## Your own Base
 
@@ -141,7 +141,7 @@ The panel above is the Sunzi example equipment as it ships, before `plug init`. 
 ```json
 { "hooks": { "SessionStart": [ { "matcher": "startup|resume|clear",
   "hooks": [ { "type": "command",
-    "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
+    "command": "\"<path-to-plug>\" --root \"<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
 `--emit` shows the panel on the owner's screen (`systemMessage`) and hands the pilot one verdict line as `additionalContext` (D74). `AGENTS.md` tells Codex-style pilots to run `plug status` first thing instead. Antigravity's SessionStart has its own shape, so its plugin calls `status --emit antigravity`: the verdict line is the injected system message, and the panel rides in the message's `renderInfo.markdown`, which neither the app nor `agy` displays (their UI does not show injected system messages), so on that side the owner runs `plug status` when he wants the panel (D89).
@@ -258,7 +258,7 @@ from the chat:  ! plug apply proposals/pending/<file>.md --owner
 look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
 ```
 
-Why two forms: inside Claude Code or Codex the `!` prefix runs the command in the owner's own session, but that session is the same environment the pilot runs in, so `plug apply` cannot tell an owner keystroke from an agent tool call and refuses on the agent markers. The chat form therefore carries `--owner` (`PLUG_OWNER=1` works too); in a real terminal no marker is set and no flag is needed. `--dry-run` is open to anyone, anywhere. A pilot passing `--owner` is exactly the broken promise that setting `KB_APPROVE` by hand would be, and, like that one, the real backstop is pre-commit. The wording lives in one function, `apply.owner_lines()`.
+Why two forms: inside Claude Code or Codex the `!` prefix runs the command in the owner's own session, but that session is the same environment the pilot runs in, so `plug apply` cannot tell an owner keystroke from an agent tool call and refuses on the agent markers. The chat form therefore carries `--owner` (`PLUG_OWNER=1` works too); in a real terminal no marker is set and no flag is needed. `--dry-run` is open to anyone, anywhere. A pilot passing `--owner` is exactly the broken promise that setting `KB_APPROVE` by hand would be, and, like that one, the real backstop is pre-commit. The guard lives in `src/cmd/apply.rs`.
 
 ## Two cards
 

@@ -14,7 +14,7 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 有三样东西被衡量，用三种不同的方法，从不并成一个数：
 
 - 检索跑在一个**公开黄金集**上，50 个用例，谁都能重跑：recall@10 是 0.98（中文 0.96，英文 1.00）。
-- 两道封锁通过**验收脚本**：25 项自动跑，另有 5 项在实机驾驶员里人工验证。
+- 封锁、并发热索引与架构红线通过 **`cargo test --offline`**（6/6 套 Rust 集成与棘轮测试，并在 Claude Code / Codex / Antigravity 三实机上通过四步 `plug check --contact`）。
 - 一个**私有盲测**跑在主人自己的处境上，以哈希登记：盲选在全部六个处境都选了带装备的那份，对四个不同的驾驶员各自如此（95% 区间 0.61 到 1.00）。
 
 ## 它做什么（全都在机器里；内容从不在这儿）
@@ -32,11 +32,11 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 | `plug eval` / `plug hash` | 黄金集 recall@10（支持 YAML 与 Markdown 表，中文召回为零即 ERROR）与本地 git blob 8 位短哈希 |
 | `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | 幂等装配 `pre-commit`、Claude `.claude/settings.json` + `.mcp.json`、Codex `.codex/hooks.json` + `.codex/config.toml`、Antigravity `.agents/plugins/entryplug/`、内嵌地图模板（仅缺失时写入）、说明书镜像及 `work/` / `workshop/` |
 
-两条禁令由 `gates/` 强制执行，不是靠提示词。
+两条禁令由内置原生钩子（`plug gate`）强制执行，不是靠提示词。
 
-**暴走封锁**（不要改规则或装备，不要造新装备；改成写一条改装申请）是一个 git pre-commit 钩子，加上 Claude Code 的 deny 规则。要知道 deny 那一半值多少：规则住在 `<content-repo>/.claude/settings.json` 里，只约束**项目根就是这个仓**的会话。一个从别处工作的 agent，另一个项目、一个机器仓、或一个临时目录，改这些文件时毫无阻拦，只有 pre-commit 拦得住结果落地。所以 pre-commit 是硬的那层，deny 是客气的那层。它的保护策略读自 `git show HEAD:plug.yaml`，所以在工作区把 `unprotected:` 放宽、又不把这份配置暂存，什么也换不来（2026-09-07 审计 X-01）；HEAD 里没有 plug.yaml 时它退回工作区，并在 stderr 上说一声。硬不等于密不透风：`--no-verify` 和 `KB_APPROVE=1` 是两个有记录在案的绕过方式，都会留下痕迹，也都归主人用。
+**暴走封锁**（不要改规则或装备，不要造新装备；改成写一条 Unified Diff 改装申请）由三层共同守门：三驾驶员统一的 `PreToolUse` 工作区暴走锁（`plug gate pretool`，覆盖文件编辑工具、shell 写命令与 `.kb/hooks/**`）、Claude Code 的 `permissions.deny`，以及 git `pre-commit` 钩子（`plug gate precommit`）。它的保护策略读自 `git show HEAD:plug.yaml`，所以在工作区把 `unprotected:` 放宽、又不把这份配置暂存，什么也换不来（2026-09-07 审计 X-01）；HEAD 里没有 `plug.yaml` 时它退回工作区并在 stderr 上明说。硬不等于密不透风：`--no-verify` 和 `KB_APPROVE=1` 是两个有记录在案的绕过方式，都会留下痕迹，也都归主人用。
 
-**出击封锁**（不以主人的名义送出任何东西；先问）是一个 PreToolUse 钩子，一份 Claude Code、Codex 和 Antigravity 共用的名单。它是常见对外写命令的绊线，不是沙箱：读放行（不带写方法的 curl/wget、WebFetch、读邮件），名单上的写形式拒绝（带写方法或上传参数的 curl/wget、PowerShell 的 -Method Post/-Body、Python 的 requests.post/httpx/smtplib、ssh/scp/sendmail、git push、gh、Artifact、MCP 的 send/reply/forward/submit/pay/publish），名单外的它看不见：任意代码的网络写入、浏览器点击（2026-09-07 审计 X-02）。决定是一个退出码为 0 的进程在 stdout 上打出的一行 JSON：`hookSpecificOutput.permissionDecision: "deny"`，配一个非空的 `permissionDecisionReason`，在每个驾驶员上都实机验证过（D65）。钩子接到了每个能跑命令或对外发布的工具：Bash、PowerShell、WebFetch、Artifact 和所有 MCP 工具。Codex 自己的 `approval_policy` 和 `sandbox_mode` 叠在上面当第二层；`plug check --contact codex` 会把两者都打出来，让你看清还有什么挡着或没挡着。Antigravity 说的是它自己的钩子协议：同一个脚本凭 payload 的形状认出它，用 `{"decision": "deny", "reason": …}` 回答；钩子看得见它进 shell 的两扇门（`run_command`、`send_command_input`，名单里两个都要写上）和每一次 MCP 调用——改名成 `mcp__…`，于是给另外两个驾驶员写的那条 MCP 规则照样适用（D88）。此外还有一个压缩固定项和一个 Stop 钩子记录提醒，都是提醒级；Antigravity 这两样都没有，也没有能随仓库走的 deny 层，这是有意的决定（D90）。
+**出击封锁**（不以主人的名义送出任何东西；先问）运行在同一个 `plug gate pretool` 钩子里，一份 Claude Code、Codex 和 Antigravity 共用的名单。它是常见对外写命令的绊线，不是沙箱：读放行（不带写方法的 curl/wget、WebFetch、读邮件），名单上的写形式拒绝（带写方法或上传参数的 curl/wget、PowerShell 的 -Method Post/-Body、Python 的 requests.post/httpx/smtplib、ssh/scp/sendmail、git push、gh、Artifact、MCP 的 send/reply/forward/submit/pay/publish），名单外的它看不见：任意代码的网络写入、浏览器点击（2026-09-07 审计 X-02）。决定是一个退出码为 0 的进程在 stdout 上打出的一行 JSON（Claude/Codex 用 `hookSpecificOutput.permissionDecision: "deny"`，Antigravity 用 `{"decision": "deny", "reason": …}`；D65、D88）。Codex 自己的 `approval_policy` 和 `sandbox_mode` 叠在上面当第二层；`plug check --contact codex` 会把两者都打出来。Antigravity 的 shell 工具（`run_command`、`send_command_input`、`manage_task(send_input)`）与 MCP 调用（`call_mcp_tool` / `mcp_*`）由 `src/pilots/mod.rs` 统一归一。此外 Claude Code 与 Codex 还有压缩固定项（`plug gate precompact`）和每会话一次的 Stop 钩子记录提醒（`plug gate stop`）。
 
 ## 为什么会有它
 
@@ -65,7 +65,7 @@ cargo test --offline        # C0-C4 验收、v2 门禁/并发/Diff、LOC 与防�
 
 `plug search` 默认覆盖字典、打法和记录；语料要加 `--scope corpus`（MCP 上是 `scope=corpus`）。没有命中时，末行会说搜的是哪个范围、索引是什么时候建的；没有索引时它会明说，并以 1 退出。
 
-上面跑的是示例上的机器。要让它从你自己的判断出发工作，就造你自己的素体（下一节）。集成细节在 `pilots/claude-code/`、`pilots/codex/` 和 `pilots/antigravity/`，闸门在 `gates/README.md`，形状在 `docs/SHAPES.md`，一路上做过的每个决定在 `docs/DECISIONS.md`。
+上面跑的是示例上的机器。要让它从你自己的判断出发工作，就造你自己的素体（下一节）。集成模板在 `pilots/claude-code/`、`pilots/codex/` 和 `pilots/antigravity/`，原生闸门在 `src/gates/mod.rs`，形状在 `docs/SHAPES.md`，一路上做过的每个决定在 `docs/DECISIONS.md`。
 
 ## 造你自己的素体
 
@@ -125,7 +125,7 @@ RULES.md。不要跑 plug init。
 ```json
 { "hooks": { "SessionStart": [ { "matcher": "startup|resume|clear",
   "hooks": [ { "type": "command",
-    "command": "python -m entryplug.cli --root \"//c/<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
+    "command": "\"<path-to-plug>\" --root \"<content-repo>\" status --emit", "timeout": 30 } ] } ] } }
 ```
 
 `--emit` 把面板显示在主人的屏幕上（`systemMessage`），只把一行判定作为 `additionalContext` 递给驾驶员（D74）。`AGENTS.md` 则叫 Codex 式的驾驶员一上来先跑 `plug status`。Antigravity 的 SessionStart 有它自己的格式，所以它的插件调用 `status --emit antigravity`：判定那一行作为注入的系统消息交给驾驶员；面板放在这条消息的 `renderInfo.markdown` 里，但 App 和 `agy` 都不显示（它们的界面不显示注入的系统消息），所以在这一侧主人想看面板就自己跑 `plug status`（D89）。
@@ -242,7 +242,7 @@ from the chat:  ! plug apply proposals/pending/<file>.md --owner
 look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
 ```
 
-为什么两种形式：在 Claude Code 或 Codex 里，`!` 前缀会在主人自己的会话里跑这条命令，但那个会话就是驾驶员运行的同一个环境，所以 `plug apply` 分不清一次主人的敲键和一次 agent 的工具调用，于是撞上 agent 标记就拒绝。所以聊天里的那种形式带 `--owner`（`PLUG_OWNER=1` 也行）；在真正的终端里没有任何标记，也不需要任何 flag。`--dry-run` 对任何人、任何地方都开放。一个驾驶员传 `--owner`，恰恰就是手动设 `KB_APPROVE` 那种被打破的承诺，而且和那一个一样，真正的兜底是 pre-commit。这段措辞住在一个函数里，`apply.owner_lines()`。
+为什么两种形式：在 Claude Code 或 Codex 里，`!` 前缀会在主人自己的会话里跑这条命令，但那个会话就是驾驶员运行的同一个环境，所以 `plug apply` 分不清一次主人的敲键和一次 agent 的工具调用，于是撞上 agent 标记就拒绝。所以聊天里的那种形式带 `--owner`（`PLUG_OWNER=1` 也行）；在真正的终端里没有任何标记，也不需要任何 flag。`--dry-run` 对任何人、任何地方都开放。一个驾驶员传 `--owner`，恰恰就是手动设 `KB_APPROVE` 那种被打破的承诺，而且和那一个一样，真正的兜底是 pre-commit。守门逻辑在 `src/cmd/apply.rs`。
 
 ## 两张卡片
 
