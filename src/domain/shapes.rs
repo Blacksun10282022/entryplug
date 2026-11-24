@@ -54,6 +54,11 @@ pub fn split_frontmatter(text: &str) -> (Option<Fm>, String, Option<String>) {
         }
         fm.insert(ks.into(), v.clone());
     }
+    if matches!(fm.get("base"), Some(Value::Number(_))) {
+        if let Some(raw_b) = rest[..end].lines().find_map(|l| l.trim_start().strip_prefix("base:").map(|r| r.split('#').next().unwrap_or("").trim().trim_matches(&['"', '\''][..]).to_string())).filter(|s| !s.is_empty()) {
+            fm.insert("base".into(), Value::String(raw_b));
+        }
+    }
     (Some(fm), body, None)
 }
 
