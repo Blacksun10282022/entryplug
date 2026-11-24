@@ -4,14 +4,14 @@ English | [简体中文](README.zh-CN.md)
 
 ## In plain words
 
-EntryPlug is a governance layer for AI coding agents (Claude Code, Codex and Antigravity): a small CLI plus a read-only MCP server. One person writes down their rules, facts and past decisions; the agent searches them over MCP and works from them. EntryPlug's job is to keep the agent from changing them, and from sending anything out in that person's name without asking first.
+EntryPlug is a governance layer for AI coding agents (Claude Code, Codex and Antigravity): a single pure-Rust CLI (`plug`) plus a read-only MCP server (zero Python or runtime dependencies). One person writes down their rules, facts and past decisions; the agent searches them over MCP and works from them. EntryPlug's job is to keep the agent from changing them, and from sending anything out in that person's name without asking first.
 
 Both limits are enforced in code, not in the prompt:
 
-- **Protected files.** A Git pre-commit hook plus Claude Code deny rules refuse changes to the person's rules, facts and approved tools. The agent writes a change request instead; only the owner can apply it.
-- **Outbound actions.** A PreToolUse hook refuses the common outbound write commands (`git push`, `gh`, HTTP POST, mail, publish and send tools), verified live in Claude Code, Codex and Antigravity's `agy` CLI. It is a tripwire, not a sandbox: code outside its list can still reach the network.
+- **Protected files.** A unified `PreToolUse` worktree lock (across Claude Code, Codex and Antigravity), Claude Code `permissions.deny`, and a Git `pre-commit` hook refuse edits and commits to the person's rules, facts, `plug.yaml` and approved tools. The agent writes a Unified Diff refit request instead; only the owner can apply it.
+- **Outbound actions.** The same `PreToolUse` hook (`plug gate pretool`) refuses common outbound write commands (`git push`, `gh`, HTTP POST, mail, publish and send tools), verified in Claude Code, Codex and Antigravity. It is a tripwire, not a sandbox: code outside its list can still reach the network.
 
-Measured (details in [How it is measured](#how-it-is-measured)): retrieval recall@10 is 0.98 on a public 50-case gold set; the locks pass an acceptance script (25 automated checks, 5 verified by hand in live sessions); 162 unit tests. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
+Measured (details in [How it is measured](#how-it-is-measured)): release binary is **3.04 MB** (3,362 production Rust LOC); retrieval recall@10 is **0.98** on the public 50-case gold set with zero external segmenter; the locks, gates, concurrency, and no-leak ratchets pass `cargo test --offline` in ~6 s. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
 
 The rest of this README uses the project's own vocabulary: the agent is the **pilot**, the person's notes are the **Base**, their tools are **Equipment**, and the two limits are the **berserk lock** and the **sortie lock**.
 
@@ -36,13 +36,16 @@ Three things are measured, three separate ways, and never mixed into one number:
 
 | verb | what it does |
 |---|---|
-| `plug index` | walks the content repo, validates shapes, chunks, then tokenises (jieba words plus CJK bigrams) into **one FTS5 table**; incremental by file hash; a pending refit request is indexed from its reasons only, and not at all when its target is excluded (D84); writes the human-readable `index.md` and each equipment's `playbooks/INDEX.md`, and mirrors the manuals into the pilots' skills directories |
-| `plug search` / MCP `search` | the only query interface, read-only: one or more queries, alias expansion, full text (a long Chinese sentence keeps its short terms: the bigrams around every one-character word are searched too, D85), round-robin merge, grouped by document, compact lines (id · source · file#Lstart-Lend · kind · excerpt). **No reranking**: reading the window and weighing it is the pilot's job. Over MCP it never rebuilds, so a read really is a read; the CLI still rebuilds a stale index before answering (D76) and `--no-index` turns that off. Either way a stale index puts one `WARNING index stale; run plug index — N file(s) newer than the index built …` line ahead of the results (audit 2026-09-07, X-04; D83), and `plug status` shows the index layer [NG] |
-| `plug status` | the boot self-check. One line per layer (index, Base, deny + pre-commit, berserk lock, sortie lock, equipment bay, `.plug-off`), one more when records are past their `due` day with no outcome (informational, never orange; D86), then a sync rate and a verdict. Exits nonzero only when the index layer itself is unusable |
-| `plug check` | the check-up: ERROR / WARNING one line at a time with the time each was verified, the header self-check (shape version · index freshness · when each hook last fired · mounted equipment), each equipment's own `checks/`, refit requests unapproved for 30 days moved to rejected/, a `due` WARNING for a record past the day it set for itself (`due: YYYY-MM-DD`; before that day there is none, and it replaces the 30-day `outcome` WARNING; D86), one page of report plus the sync rate. Never a total score. `--contact claude-code\|codex\|antigravity` runs the four-step first-contact smoke test |
-| `plug apply` | approves one refit request: verifies the base short hash, adds / replaces / retires, checks that the change adds no new ERROR (ones already in the repo are counted, not blocking), then git commits (the proposal sha in a trailer). A base mismatch is refused outright, never silently overwritten. **Owner only**: run inside an agent environment, it refuses and tells the owner how to run it himself |
-| `plug eval` | gold-set recall@10; zero recall on Chinese queries is an ERROR |
-| `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | installs the gates and the pilot shells into a content repo: the pre-commit hook, `.claude/settings.json`'s deny rules and hooks (merged, never overwritten), `.mcp.json`, the CLAUDE.md / AGENTS.md / GEMINI.md maps (only when absent), the manual mirror, `.codex/hooks.json` and `.codex/config.toml`, Antigravity's workspace plugin `.agents/plugins/entryplug/` (MCP server and hooks, one wiring for its desktop app and its `agy` CLI), the `work/` and `workshop/` zones, all with real absolute paths; idempotent, and it prints what it did to every file. `both` is Claude Code and Codex, `all` adds Antigravity. `--link-skills` also installs the manuals user-level |
+| `plug index [--full] [--books]` | walks the content repo in parallel (rayon), validates shapes, chunks, and indexes pure CJK 2-grams + lowercased ASCII into Schema v2 `.kb/state.sqlite` (contentless 2-column FTS5 with 20× title boost) and optional cold `.kb/books.sqlite`; writes the bounded Active-Heads `index.md` (<=50 KB) and each equipment's `playbooks/INDEX.md`, and mirrors manuals into pilot skill dirs |
+| `plug search` / MCP `search` | strictly read-only (`SQLITE_OPEN_READ_ONLY`): multi-query round-robin merge, alias expansion, scopes (`tools` · `corpus` · `books` · `logs` · `memory` · `all`), Active Heads default (`--history` shows superseded records), `--view compact\|spine`, date/series/tool/kind filters. **No reranking**: reading the window and weighing it is the pilot's job. Never writes on MCP; surfaces staleness ahead of hits |
+| `plug status [--emit] [--json]` | boot self-check across 7 layers (index, Base, AT-Field, berserk lock, sortie lock with exact matcher audit, Worktree vs `HEAD`, equipment bay) plus `.plug-off`, `Records due`, and `Review due`. Exits nonzero only when the index itself is unusable |
+| `plug check [--contact <pilot>]` | check-up: ERROR / WARNING one line at a time, shape v1/v2 validation, quote & rule-id verification, tracked-clean equipment `checks/*.py`, 30-day proposal expiry, revived decision-only `self/数字.md` (with `.kb/blind.jsonl` commitment check), and 4-step `--contact` smoke test |
+| `plug apply <proposal>` | owner-only approval: verifies `base` short hash, applies ```diff Unified Diff (or full-text for `base: new`, or `retire`), rolls back on any introduced ERROR or commit failure, commits with `--only`, re-indexes, and auto-syncs installed pilot wiring when `plug.yaml` changes |
+| `plug gate <subcommand>` | built-in native hooks (`pretool`, `posttool`, `prompt`, `precommit`, `precompact`, `stop`): unified worktree berserk + sortie locks, concurrent WAL hot-indexing + blind commitment + fast quote verification, cross-pilot prompt hints & `topic_pulse` |
+| `plug trace sync` | incrementally extracts Claude Code / Codex / Antigravity JSONL transcripts (workspace-filtered, secret/PEM/card/ID masked, >2000-char pastes offloaded) into `logs/` searchable via `scope=logs` |
+| `plug review` | aggregates due decisions, hot `topic_pulse` topics, zero-hit searches, and quote/gate anomalies into an owner-reviewed digest (`--mark-reviewed` resets counters) |
+| `plug eval` / `plug hash` | gold-set recall@10 (YAML or Markdown tables; zero Chinese recall is an ERROR) and local git-blob 8-char short hash |
+| `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | idempotently wires `pre-commit`, Claude `.claude/settings.json` + `.mcp.json`, Codex `.codex/hooks.json` + `.codex/config.toml`, Antigravity `.agents/plugins/entryplug/`, embedded maps (when absent), skill mirrors, and `work/` + `workshop/` |
 
 Two prohibitions are enforced by `gates/`, not by prompting.
 
@@ -65,15 +68,14 @@ A blind judge once wrote a complete, confident verdict from the file names alone
 ## Five minutes
 
 ```
-git clone <this repo> entryplug && pip install -e ./entryplug
-cd entryplug
-plug --root example-tool index
+git clone <this repo> entryplug && cd entryplug
+cargo build --release       # produces target/release/plug(.exe), ~3 MB, zero runtime deps
+plug --root example-tool index --full
 plug --root example-tool status
 plug --root example-tool search 诡道
 plug --root example-tool check
 plug --root example-tool eval bench/public/goldset-sunzi.yaml
-python -m pytest            # one group per verb, per gate, per kind of ERROR
-python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FAIL, human items MANUAL
+cargo test --offline        # C0-C4 acceptance, v2 gates/concurrency/diffs, LOC & no-leak ratchets
 ```
 
 `plug search` covers the dictionary, the playbooks and the records by default; the corpus needs `--scope corpus` (`scope=corpus` over MCP). With no hits the tail line says which scope was searched and when the index was built; with no index it says so and exits 1.
@@ -221,11 +223,11 @@ Three things, three ways, never one number.
 
 | measure | result | reproduce | as of |
 |---|---|---|---|
-| the two locks (acceptance) | 25 automated PASS, 0 FAIL, 5 manual | `python tests/acceptance.py` | 2026-11-20 |
-| verbs and gates (unit tests) | 162 passed | `python -m pytest` | 2026-11-20 |
-| gold-set recall@10 | 0.98 (Chinese 0.96, English 1.00), n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-12 |
+| C0–C4 acceptance, v2 gates, concurrency & ratchets | 6/6 Rust test suites PASS (~6 s), 0 warnings | `cargo test --offline` | 2026-11-25 |
+| release binary / production LOC | 3.04 MB (`<=4.0 MB`) · 3,362 LOC (`<=3,400`) | `cargo build --release --offline` | 2026-11-25 |
+| gold-set recall@10 | 0.98 (Chinese 0.96, English 1.00), n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-25 |
 
-A test (`tests/test_eval_goldset.py`) holds the recall at a floor of 0.93 and asserts that Chinese recall is never zero.
+`tests/integration.rs` holds public gold-set recall at a floor of 0.96 and asserts that Chinese recall is never zero; `tests/ratchets_and_noleak.rs` enforces the 3,400 LOC budget, forbidden symbols, and public-repo no-leak checks.
 
 The private blind benchmark runs on the owner's own situations, which never enter this repo; only a registered case-file hash, and then a proportion with its interval, may be published (`bench/registry.md`). These are the rows where the blind pick went to the equipped answer on all six situations:
 
@@ -285,20 +287,17 @@ That copies every `tools/*/SKILL.md` into the user-level skills directory (`~/.c
 ## Layout
 
 ```
-entryplug/    cli · config · shapes · index · search · mcp · check · numbers · report · contact · status · apply · eval · init
-              · codex · antigravity (what the machine knows about those pilots)
-              (one verb per file, <=250 lines each, no classes and no frameworks)
-gates/        precommit · outbound · precompact · stop + the hook template
-pilots/       claude-code/ (plugin shell · map · deny template) · codex/ (AGENTS.md · hooks · junction notes)
-              · antigravity/ (GEMINI.md overlay · the workspace plugin and its hook contract)
+src/          main · config · util · domain/ (shapes · tokenize · entries · diff · quotes)
+              · store/ (sqlite schema v2 · index · search · telemetry)
+              · pilots/ (claude-code · codex · antigravity · trace) · gates/ · cmd/
+pilots/       embedded CLAUDE.md · AGENTS.md · GEMINI.md · Codex openai.yaml template
 example-tool/ the Sunzi example content repo (corpus public domain, everything else CC0)
-tests/        one group per verb, per gate, per kind of ERROR, plus no-leak and the acceptance script
+tests/        integration.rs (C0-C4 + v2 acceptance) · ratchets_and_noleak.rs (LOC + hygiene)
 bench/        the benchmark input format · a public mini gold set · the private benchmark registry
 docs/         DECISIONS · SHAPES · BENCH
-extras/       where connector side-scripts live (not counted, not tested)
 ```
 
-Dependencies: Python 3.12 · stdlib (sqlite3 plus FTS5) · jieba · PyYAML · git. Works on native Windows, nothing to compile. Vector retrieval is an optional module, `pip install entryplug[dense]` (an interface stub in this version).
+Dependencies: none at runtime — one statically linked Rust binary (`plug` / `plug.exe`, bundled SQLite 3 + FTS5) plus `git` on PATH. Build with Rust (`cargo build --release`).
 
 ## What it does not do
 

@@ -1,6 +1,16 @@
 # STATUS
 
-Last verified on a real Claude Code 2.1.259 / codex-cli 0.152.0: **2026-09-03** (C1.2 deny under bypass: refused; the sortie
+## Changed on 2026-11-25 (v0.2.0 — Pure-Rust Core, D95–D100)
+
+The entire machine (CLI, read-only MCP server, all hooks/gates, cross-pilot trace sync, and review digest) is now a single statically linked Rust binary (`plug` / `plug.exe`, **3.04 MB** release, **3,362** production code lines in `src/`, bundled SQLite 3 + FTS5, zero Python/`jieba` runtime dependency).
+
+- **Verified on `example-tool` (`cargo test --offline`)**: 6/6 integration, architecture-ratchet, and public-repo no-leak suites PASS in ~6.2 s (0 compiler warnings); public 50-case `bench/public/goldset-sunzi.yaml` holds **0.98 recall@10** (`zh 0.96`, `en 1.00`) with pure CJK 2-gram + lowercased ASCII + standalone `aliases:`.
+- **Schema v2 & locks**: normalized SQLite (`.kb/state.sqlite` + optional cold `.kb/books.sqlite`), Active-Heads `index.md` capped under 50 KB, unified `PreToolUse` Worktree Berserk Lock + Sortie Lock across Claude Code, Codex, and Antigravity, exact `PreToolUse` matcher drift detection + `Worktree` status layer, `PostToolUse` concurrent WAL hot-indexing + `.kb/blind.jsonl` pre-reveal commitment + fast ellipsis-tolerant quote verification, Unified Diff `plug apply`, `plug trace sync`, `plug gate prompt`, and `plug review`.
+- **Live session re-verification (MANUAL C1.2 / C2.3 / C3.3 / C4.4 / C4.6)**: pending deployment cutover in the owner's active content repo.
+
+---
+
+Last verified on v0.1 (Python) on a real Claude Code 2.1.259 / codex-cli 0.152.0: **2026-09-03** (C1.2 deny under bypass: refused; the sortie
 lock in both pilots: refused, including the PowerShell tool and, in an interactive session, the Artifact tool; C2.3 / C3.3 /
 C4.4 still open). The four things that can only be seen in a live
 session — deny refusing an Edit, still refusing under bypass, carrying on after a compaction, switching pilots —

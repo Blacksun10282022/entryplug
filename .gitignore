@@ -1,9 +1,8 @@
-__pycache__/
-*.pyc
+/target/
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
 .kb/
-.pytest_cache/
-build/
-dist/
-*.egg-info/
 .claude/settings.local.json
+.claude/skills/
+.agents/skills/

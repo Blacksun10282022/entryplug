@@ -1,6 +1,0 @@
-#!/bin/sh
-# The content repo's git pre-commit hook (the berserk lock). Copy to <content-repo>/.git/hooks/pre-commit and
-# change the path below to wherever you cloned entryplug.
-# On Windows write //c/... or C:/...; git runs it with sh. KB_APPROVE=1 is set by plug apply and by nothing else;
-# do not set it by hand, and do not use --no-verify.
-exec python "//c/<entryplug-repo>/gates/precommit.py"

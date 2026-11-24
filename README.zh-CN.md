@@ -21,13 +21,16 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 
 | 命令 | 作用 |
 |---|---|
-| `plug index` | 遍历内容仓，校验形状，切块，再分词（jieba 词加中日韩二元组）写进**一张 FTS5 表**；按文件哈希增量；待批的改装申请只按它的理由入索引，目标被排除的整份不入（D84）；生成人类可读的 `index.md` 和每件装备的 `playbooks/INDEX.md`，并把说明书镜像到各驾驶员的 skills 目录 |
-| `plug search` / MCP `search` | 唯一的查询接口，只读：一个或多个查询，别名展开，全文检索（长的中文句子保留短词：每个单字词前后的二元组也一并去搜，D85），轮转合并，按文档分组，紧凑成行（id · 来源 · file#Lstart-Lend · 种类 · 摘录）。**不做重排**：读窗口并权衡是驾驶员的活。走 MCP 时它从不重建，所以读就真的只是读；命令行仍会在作答前把过期索引重建一遍（D76），`--no-index` 关掉这个动作。两种情况下，索引过期都会在结果最前面多出一行 `WARNING index stale; run plug index — N file(s) newer than the index built …`，写明落后多少（2026-09-07 审计 X-04；D83），`plug status` 的索引那一层也报 [NG] |
-| `plug status` | 开机自检。每一层一行（索引、素体、deny + pre-commit、暴走封锁、出击封锁、装备舱、`.plug-off`），有记录过了自己写的 `due` 日还没填结果时再多一行（只是提示，不变橙；D86），然后是一个同步率和一句判定。只有索引层自身不可用时才以非零退出 |
-| `plug check` | 体检：ERROR / WARNING 一次一行，附上每条的核验时间；表头自检（形状版本 · 索引新鲜度 · 每个钩子上次触发的时间 · 已挂载的装备）；每件装备自己的 `checks/`；超过 30 天未批准的改装申请移入 rejected/；记录过了自己写的结算日（`due: YYYY-MM-DD`）还没填结果，报一条 `due` WARNING（没到那天不报，也不再报 30 天的 `outcome` WARNING；D86）；一页报告加上同步率。从不给总分。`--contact claude-code\|codex\|antigravity` 跑四步的首次接触冒烟测试 |
-| `plug apply` | 批准一条改装申请：校验 base 短哈希，新增 / 替换 / 退役，体检不新增 ERROR（库里原有的只计数、不拦），然后 git 提交（trailer 里带提案 sha）。base 对不上就直接拒绝，从不悄悄覆盖。**仅限主人**：在 agent 环境里运行它会拒绝，并告诉主人怎么自己跑 |
-| `plug eval` | 黄金集 recall@10；中文查询召回为零是一个 ERROR |
-| `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | 把闸门和驾驶员外壳装进一个内容仓：pre-commit 钩子、`.claude/settings.json` 的 deny 规则和钩子（合并，从不覆盖）、`.mcp.json`、CLAUDE.md / AGENTS.md / GEMINI.md 地图（仅在缺失时）、说明书镜像、`.codex/hooks.json` 和 `.codex/config.toml`、Antigravity 的工作区插件 `.agents/plugins/entryplug/`（MCP 服务器加钩子，它的桌面 app 和 `agy` 命令行共用这一套）、`work/` 和 `workshop/` 区，全部用真实绝对路径；幂等，并把对每个文件做了什么都打印出来。`both` 是 Claude Code 加 Codex，`all` 再加上 Antigravity。`--link-skills` 还会把说明书装到用户级 |
+| `plug index [--full] [--books]` | 用 rayon 并行遍历内容仓，校验形状，以纯 CJK 二元组 + 小写 ASCII 写入 Schema v2 `.kb/state.sqlite`（无内容双列 FTS5，标题 20× 权重）与可选冷库 `.kb/books.sqlite`；生成受上限约束（<=50 KB）的 Active-Heads `index.md`、各装备 `playbooks/INDEX.md`，并镜像说明书到驾驶员 skills 目录 |
+| `plug search` / MCP `search` | 严格只读（`SQLITE_OPEN_READ_ONLY`）：多查询轮转合并、别名展开，支持 `tools` / `corpus` / `books` / `logs` / `memory` / `all` 范围，默认只返 Active Heads（`--history` 含历史被取代记录），支持 `--view compact\|spine` 及日期/系列/装备过滤。**不做重排**；MCP 永不写盘，索引过期时在结果首行显式告警 |
+| `plug status [--emit] [--json]` | 开机自检（7 层：索引、素体、AT-Field、暴走封锁、出击封锁及精确 matcher 审计、Worktree 相对 `HEAD` 漂移、装备舱）外加 `.plug-off`、`Records due` 与 `Review due` 提示行。仅索引层不可用时以非零退出 |
+| `plug check [--contact <pilot>]` | 体检：逐行 ERROR / WARNING、形状 v1/v2 校验、引文与规则编号核验、已跟踪洁净 `checks/*.py`、30 天提案过期归档、仅统计决策记录的 `self/数字.md`（联动 `.kb/blind.jsonl` 盲测承诺），以及四步 `--contact` 冒烟测试 |
+| `plug apply <proposal>` | 仅限主人的改装审批：校验 `base` 短哈希，支持 ```diff Unified Diff（新增文件用 `base: new` 全文或 `retire` 退役），引入新 ERROR 或提交失败自动完整回滚，`--only` 原子提交并重建索引；修改 `plug.yaml` 时自动同步已装驾驶员配置 |
+| `plug gate <subcommand>` | 内置原生钩子（`pretool` / `posttool` / `prompt` / `precommit` / `precompact` / `stop`）：三驾驶员统一工作区暴走锁 + 出击封锁、并发 WAL 单文件热索引 + 盲测承诺 + 快速引文核验、跨驾驶员 `prompt_hints` 与 `topic_pulse` |
+| `plug trace sync` | 从 Claude Code / Codex / Antigravity 的 JSONL 会话日志按字节偏移增量抽取对话（按仓名过滤，脱敏密钥/私钥/密码/卡号/证件号，超长粘贴分流到 `粘贴/`），落盘 `logs/` 并供 `scope=logs` 检索 |
+| `plug review` | 汇总到期决策、`topic_pulse` 热点主题、零命中查询与引文/门禁异常，生成供主人复盘的摘要（`--mark-reviewed` 重置计数，绝不自动改写规则或记忆） |
+| `plug eval` / `plug hash` | 黄金集 recall@10（支持 YAML 与 Markdown 表，中文召回为零即 ERROR）与本地 git blob 8 位短哈希 |
+| `plug init --pilot claude-code\|codex\|antigravity\|both\|all` | 幂等装配 `pre-commit`、Claude `.claude/settings.json` + `.mcp.json`、Codex `.codex/hooks.json` + `.codex/config.toml`、Antigravity `.agents/plugins/entryplug/`、内嵌地图模板（仅缺失时写入）、说明书镜像及 `work/` / `workshop/` |
 
 两条禁令由 `gates/` 强制执行，不是靠提示词。
 
@@ -50,15 +53,14 @@ entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出
 ## 五分钟
 
 ```
-git clone <this repo> entryplug && pip install -e ./entryplug
-cd entryplug
-plug --root example-tool index
+git clone <this repo> entryplug && cd entryplug
+cargo build --release       # 产出单文件 target/release/plug(.exe)，约 3 MB，零运行时依赖
+plug --root example-tool index --full
 plug --root example-tool status
 plug --root example-tool search 诡道
 plug --root example-tool check
 plug --root example-tool eval bench/public/goldset-sunzi.yaml
-python -m pytest            # one group per verb, per gate, per kind of ERROR
-python tests/acceptance.py  # the acceptance script C0-C4: machine items PASS/FAIL, human items MANUAL
+cargo test --offline        # C0-C4 验收、v2 门禁/并发/Diff、LOC 与防泄露棘轮测试
 ```
 
 `plug search` 默认覆盖字典、打法和记录；语料要加 `--scope corpus`（MCP 上是 `scope=corpus`）。没有命中时，末行会说搜的是哪个范围、索引是什么时候建的；没有索引时它会明说，并以 1 退出。
@@ -205,11 +207,11 @@ RULES.md。不要跑 plug init。
 
 | 指标 | 结果 | 复现 | 截至 |
 |---|---|---|---|
-| 两道封锁（验收） | 25 项自动 PASS，0 FAIL，5 项人工 | `python tests/acceptance.py` | 2026-11-20 |
-| 命令与闸门（单元测试） | 162 通过 | `python -m pytest` | 2026-11-20 |
-| 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-12 |
+| C0–C4 验收、v2 门禁/并发与架构棘轮 | 6/6 Rust 测试套全通过（约 6 秒），0 警告 | `cargo test --offline` | 2026-11-25 |
+| 单文件体积 / 生产代码行数 | 3.04 MB（`<=4.0 MB`）· 3,362 行（`<=3,400`） | `cargo build --release --offline` | 2026-11-25 |
+| 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-25 |
 
-有一个测试（`tests/test_eval_goldset.py`）把召回压在 0.93 的下限，并断言中文召回永不为零。
+`tests/integration.rs` 将公开黄金集召回率压在 0.96 下限并断言中文召回永不为零；`tests/ratchets_and_noleak.rs` 自动守护 3,400 行代码红线、禁用符号与公仓防泄露规则。
 
 私有盲测跑在主人自己的处境上，那些处境从不进这个仓；只有一个登记过的用例文件哈希、以及随后的一个比例连同它的区间可以公布（`bench/registry.md`）。下面这些行，是盲选在全部六个处境都选了带装备那份的行：
 
@@ -269,20 +271,17 @@ plug --root <content-repo> init --pilot claude-code --link-skills
 ## 布局
 
 ```
-entryplug/    cli · config · shapes · index · search · mcp · check · numbers · report · contact · status · apply · eval · init
-              · codex · antigravity (what the machine knows about those pilots)
-              (one verb per file, <=250 lines each, no classes and no frameworks)
-gates/        precommit · outbound · precompact · stop + the hook template
-pilots/       claude-code/ (plugin shell · map · deny template) · codex/ (AGENTS.md · hooks · junction notes)
-              · antigravity/ (GEMINI.md overlay · the workspace plugin and its hook contract)
-example-tool/ the Sunzi example content repo (corpus public domain, everything else CC0)
-tests/        one group per verb, per gate, per kind of ERROR, plus no-leak and the acceptance script
-bench/        the benchmark input format · a public mini gold set · the private benchmark registry
+src/          main · config · util · domain/ (shapes · tokenize · entries · diff · quotes)
+              · store/ (sqlite schema v2 · index · search · telemetry)
+              · pilots/ (claude-code · codex · antigravity · trace) · gates/ · cmd/
+pilots/       内嵌模板 CLAUDE.md · AGENTS.md · GEMINI.md · Codex openai.yaml
+example-tool/ 孙子示例内容仓（语料公版，其余 CC0）
+tests/        integration.rs（C0-C4 与 v2 验收）· ratchets_and_noleak.rs（代码红线与防泄露）
+bench/        基准输入格式 · 公开迷你黄金集 · 私有盲测登记册
 docs/         DECISIONS · SHAPES · BENCH
-extras/       where connector side-scripts live (not counted, not tested)
 ```
 
-依赖：Python 3.12 · 标准库（sqlite3 加 FTS5）· jieba · PyYAML · git。在原生 Windows 上就能跑，无需编译。向量检索是一个可选模块，`pip install entryplug[dense]`（本版本里是一个接口桩）。
+依赖：零运行时依赖——单个静态编译 Rust 二进制（`plug` / `plug.exe`，内置 SQLite 3 + FTS5）加 PATH 上的 `git`。源码构建需 Rust 工具链（`cargo build --release`）。
 
 ## 它不做什么
 

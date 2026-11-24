@@ -1,8 +1,8 @@
-# SHAPES · shape v1 (the field table)
+# SHAPES · shape v1 / v2 (the field table)
 
-`shape_version: 1`. Three strict shapes + one rule file + two index-only ones; optional fields may be added,
+`shape_version: 1` or `shape_version: 2` (v2 is strictly backward-compatible with v1). Three strict shapes + one rule file + two index-only ones; optional fields may be added,
 required fields may not. An unknown key in one of the three strict shapes is an ERROR. The truth of the field
-table is `SHAPES` in `entryplug/shapes.py`.
+table is `validate()` in `src/domain/shapes.rs`.
 
 The frontmatter keys are English; the section headings are Chinese. Both are on-disk vocabulary, not prose:
 they are what the shape *is*, so they stay put even though everything the machine says is in English. Changing
@@ -35,17 +35,15 @@ Observation lines (the `- ` lines under `## 观察`):
 
 | field | required | notes |
 |---|---|---|
-| tool · by · situation · verdict | yes | by = pilot · model · date; the verdict is written and saved before the owner sees it |
+| kind | no (v2) | `decision` (default when `tool` is set) or `note` (auto-inferred when `tool` is absent or `none`; notes only need `situation`, `title`, or body and are excluded from sync-rate and 30-day outcome warnings) |
+| tool · by · situation · verdict | yes for `decision` | by = pilot · model · date; written before the owner sees it (`PostToolUse` records a pre-reveal hash in `.kb/blind.jsonl`) |
 | chosen · outcome | filled in later | chosen = what the owner picked; outcome may say 它对 / 我对 / 说不清 |
-| due | no | the calendar day this judgment is to be settled, `YYYY-MM-DD` (a YAML date or a quoted string); from that day `plug status` shows one informational line and `plug check` a `due` WARNING until `outcome` is filled, in place of the 30-day `outcome` WARNING |
+| due | no | calendar day this judgment is settled, `YYYY-MM-DD`; from that day `plug status` shows one informational line and `plug check` a `due` WARNING until `outcome` is filled |
+| supersedes · extends · topic · date | no (v2) | `supersedes` links to an older record (hidden by default Active-Heads search, visible with `--history` and `--view spine`); `topic` feeds `topic_pulse` and `plug review` |
 
-Three fixed body sections: `依据` (any R-id it names must exist; citing `records/…` counts as citing a record;
-`(src: doc#seq "sentence")` or `^pNNNN` counts as a quote) · `最强反证` · `什么会改判`. A disagreement is
-verdict != chosen, computed when asked and never stored.
+Three fixed body sections (for `decision` records): `依据` (any R-id it names must exist; citing `records/…` counts as citing a record; `(src: doc#seq "sentence")` or `^pNNNN` counts as a quote) · `最强反证` · `什么会改判`. A disagreement is `verdict != chosen`, computed when asked and never stored.
 
-A record holds a judgment, not a diary: the discipline is **you gave the owner options and he chose one → write
-one record on the spot**. The Stop hook (`gates/stop.py`) nudges once at the end of a session if none was
-written; it never blocks, and `.plug-off` silences it.
+The Stop hook (`plug gate stop`) nudges once at the end of a session if none was written; it never blocks, and `.plug-off` silences it.
 
 ## Proposal (a refit request, `proposals/pending/<date>-<slug>.md`)
 
@@ -55,9 +53,7 @@ written; it never blocks, and `.plug-off` silences it.
 | base | yes | the target's current git blob short hash (`plug hash <file>`); `new` for a new file |
 | from | yes | the record that triggered it, or `学:doc-id` |
 
-Three body sections: `改成什么` (a whole-file ```` ```md ```` code block, or `retire` on the first line) ·
-`为什么` · `最强反证`. Approved ones go to `applied/`, rejected or expired ones to `rejected/` with a final
-`rejected: date · reason` line.
+Three body sections: `改成什么` (a ```diff Unified Diff code block for existing files, a whole-file ```` ```md ```` code block for `base: new` or full replacement, or `retire` on the first line) · `为什么` · `最强反证`. Approved ones go to `applied/`, rejected or expired ones to `rejected/` with a final `rejected: date · reason` line.
 
 Every proposal ends with the owner's copy-paste block — `plug check` warns (code `footer`) when a pending one
 does not have it. Two forms, because `!` runs inside the pilot's own environment and `plug apply` refuses that:
@@ -128,10 +124,7 @@ Deny rules and pre-commit only ever cover `self/` and the equipment registered i
 
 ## plug.yaml
 
-`machine` (pins the machine version) · `shape_version` · `self` · `proposals` · `index` · `index_md` · `numbers`
-· `hooks` · `pin` · `language` · `tools[{name, path, depends, ttl_days, unreviewed}]` ·
-`pilots{name: {skills, user_skills}}` · `outbound[{tool, match, reason}]` · `protected` / `unprotected` ·
-`protect` · `exclude` · `corpus[{path, tool, sub}]`. The only place in a content repo where a path may appear.
+`machine` (pins the machine version) · `shape_version` (1 or 2) · `self` · `proposals` · `index` (default `.kb/state.sqlite`) · `books_index` (default `.kb/books.sqlite`) · `index_md` · `numbers` · `hooks` · `pin` · `memory` (default `self/memory`) · `logs` (optional multi-pilot transcript dir) · `language` · `tools[{name, path, depends, ttl_days, unreviewed, outcome_days}]` · `pilots{name: {skills, user_skills}}` · `outbound[{tool, match}]` · `protected` / `unprotected` · `protect` · `exclude` · `corpus[{path, tool, sub}]` · `books` · `aliases` (YAML/TSV/Markdown alias files or inline map) · `prompt_hints[{id, pattern, hint, cooldown_hours}]` · `outcome_days` · `review_interval_days` · `topic_pulse_sessions` · `topic_pulse_fragments`. The only place in a content repo where a path may appear.
 
 `exclude:` is a list of globs that `walk()` skips, so those files never reach the index, the check-up or the
 human-readable index. It is a **visibility** switch and nothing else: an excluded file is exactly as protected as

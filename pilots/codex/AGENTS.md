@@ -9,9 +9,9 @@ This is one person's Base + Equipment. You are the pilot, not the owner: the jud
 ## What you should know at boot
 
 - Rules: `self/RULES.md`. Read the few lines relevant to this decision first (`sed -n`); you may disagree, but you must say which line and why. Hard limits are not open to disagreement.
-- Flight log (records): `self/records/<date>-<slug>.md`. A record holds a judgment, not a diary. **You gave the owner options and he chose one → write one record on the spot**, before you move on. Write it (tool · by · situation · verdict + 依据 / 最强反证 / 什么会改判) before you show him anything; fill in `chosen` when he answers, `outcome` when he tells you how it went. `by` reads `codex · <model> · <date>`. A judgment that names a day on which it will be settled (a prediction, a bet, a checkpoint) carries that day as `due: YYYY-MM-DD`; from that day the boot panel and `plug check` say it is due until `outcome` is filled.
-- Facts: `self/facts/`; how he talks: `self/style.md`.
-- Refit requests (proposals): `proposals/pending/<date>-<slug>.md` (target · base · from + 改成什么 / 为什么 / 最强反证; put the whole new file in a code block under 改成什么). Compute `base` with `plug hash <target file>`. Proposals do not appear in your reply.
+- Flight log (records): `self/records/<date>-<slug>.md`. Two kinds: `kind: decision` (default when `tool` is set — write `tool · by · situation · verdict` + `依据 / 最强反证 / 什么会改判` before showing the owner; fill `chosen` and `outcome` later, `due: YYYY-MM-DD` when dated, `supersedes:` when revising an earlier judgment) and `kind: note` (lightweight note/archive — excluded from sync-rate and 30-day outcome nag). `by` reads `codex · <model> · <date>`.
+- Facts: `self/facts/`; durable memories: `self/memory/`; how he talks: `self/style.md`.
+- Refit requests (proposals): `proposals/pending/<date>-<slug>.md` (`target · base · from` + `改成什么 / 为什么 / 最强反证`). Put a ```diff Unified Diff block under `改成什么` for existing files (or a whole-file code block for `base: new`, or `retire` to retire). Compute `base` with `plug hash <target file>`. Proposals do not appear in your reply.
 - Human-readable index: `index.md`; each equipment's playbook directory: `tools/<equipment>/playbooks/INDEX.md`.
 
 ## Where things go
@@ -29,13 +29,13 @@ This is one person's Base + Equipment. You are the pilot, not the owner: the jud
 
 ## Search
 
-- MCP tool `search(query | [q…], scope?, tool?, kind?, k?)` (server name entryplug, `plug mcp`): by default only the equipment layer; to search the corpus say `scope=corpus`. Write several queries from different angles. What comes back are candidate lines, not answers — read the window and judge for yourself.
+- MCP tool `search(query | [q…], scope?, tool?, kind?, view?, history?, k?)` (server name entryplug, `plug mcp`): default `scope=tools` searches Active Heads of dict · playbooks · records · memory; use `scope=corpus`, `scope=books`, `scope=logs`, `scope=memory`, or `scope=all`; `view=spine` returns a compact record timeline; `history=true` includes superseded records. Write several queries from different angles, then read the window and judge for yourself.
 - Fetch paragraphs with `sed -n 'start,endp' file`; find backlinks with `grep -rn "[[title]]"`.
 
 ## The two locks (enforced by the machine, not by this page)
 
-- Berserk lock: you cannot change `self/RULES.md`, `self/facts/`, or the registered equipment — pre-commit refuses it. Codex has no `permissions.deny`, so on this side pre-commit is the only layer, and you must say so out loud when the owner switches pilots. Want a change? Write a proposal. Do not set KB_APPROVE, do not use `--no-verify`.
-- Sortie lock: anything that goes outward in the owner's name (a message, an email, an application, a payment, a push) is blocked by a hook — ask him first. Build the thing locally and show him. This is a real fence on this side too: the gate returns a deny decision and the call does not run (verified on codex-cli 0.152). Your own `approval_policy` / `sandbox_mode` are a separate layer on top of it, not a substitute.
+- Berserk lock: you cannot change `self/RULES.md`, `self/facts/`, `plug.yaml`, or registered equipment — both `PreToolUse` (`plug gate pretool`, covering `apply_patch` / edit / shell redirects) and `pre-commit` refuse it. Want a change? Write a proposal. Do not set `KB_APPROVE`, do not use `--no-verify`.
+- Sortie lock: anything that goes outward in the owner's name (a message, an email, an application, a payment, a push) is blocked by `PreToolUse` — ask him first. Build the thing locally and show him. Your own `approval_policy` / `sandbox_mode` sit on top as a separate layer, not a substitute.
 
 ## When the plug is out
 
