@@ -39,7 +39,8 @@ fn copy_dir(src: &Path, dst: &Path) {
 fn run_plug(cwd: &Path, args: &[&str], stdin: Option<&str>, env_add: &[(&str, &str)], env_drop: &[&str]) -> Output {
     let mut cmd = Command::new(plug_bin());
     cmd.args(args).current_dir(cwd).stdout(Stdio::piped()).stderr(Stdio::piped());
-    for k in ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_THREAD_ID", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID", "KB_APPROVE", "PLUG_OWNER", "PLUG_ROOT", "PLUG_STAGED"] {
+    // Every variable apply.rs's AGENT_ENV knows, so the suite also passes when it is run from inside an agent session.
+    for k in ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_SESSION_ID", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CURSOR_AGENT", "AIDER_CHAT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID", "KB_APPROVE", "PLUG_OWNER", "PLUG_ROOT", "PLUG_STAGED"] {
         cmd.env_remove(k);
     }
     for k in env_drop { cmd.env_remove(k); }
@@ -69,7 +70,7 @@ fn trust_codex_hooks(root: &Path, codex_home: &Path) {
     for (ev, groups) in hooks {
         let snake = match ev.as_str() {
             "PreToolUse" => "pre_tool_use", "PostToolUse" => "post_tool_use", "PreCompact" => "pre_compact",
-            "SessionStart" => "session_start", "Stop" => "stop", o => o,
+            "SessionStart" => "session_start", "Stop" => "stop", "UserPromptSubmit" => "user_prompt_submit", o => o,
         };
         for (gi, g) in groups.as_array().unwrap().iter().enumerate() {
             for (hi, h) in g["hooks"].as_array().unwrap().iter().enumerate() {
@@ -238,6 +239,19 @@ fn v2_unified_diff_apply_exact_matcher_drift_and_worktree_locks() {
         let out = String::from_utf8_lossy(&r.stdout);
         assert!(r.status.success() && out.contains("deny"), "attack not blocked: {} -> {}", atk, out);
     }
+    // 2b. (2026-11-25) Reads that silence stderr are not writes; a real redirect into a protected file still is.
+    for cmd in ["cat plug.yaml 2>&1", "grep -n x self/RULES.md 2>/dev/null", "type plug.yaml > $null"] {
+        let r = run_plug(&root, &["gate", "pretool"], Some(&json!({"tool_name":"Bash","tool_input":{"command":cmd},"cwd":&rs}).to_string()), &[], &[]);
+        assert!(!String::from_utf8_lossy(&r.stdout).contains("deny"), "a read was blocked: {}", cmd);
+    }
+    let w = run_plug(&root, &["gate", "pretool"], Some(&json!({"tool_name":"Bash","tool_input":{"command":"echo x 2>&1 > self/RULES.md"},"cwd":&rs}).to_string()), &[], &[]);
+    assert!(String::from_utf8_lossy(&w.stdout).contains("deny"), "a write behind 2>&1 slipped through");
+    // 2c. (2026-11-25) A linked git worktree reads the shared pre-commit through `commondir`.
+    let wtp = base.join("wt-copy");
+    git(&root, &["worktree", "add", "-q", "--detach", wtp.to_str().unwrap(), "HEAD"]);
+    let wst = run_plug(&wtp, &["status"], None, &penv, &[]);
+    assert!(String::from_utf8_lossy(&wst.stdout).contains("pre-commit armed"), "linked worktree misread pre-commit:\n{}", String::from_utf8_lossy(&wst.stdout));
+    git(&root, &["worktree", "remove", "--force", wtp.to_str().unwrap()]);
 
     // 3. Exact 1-char matcher drift detection flips `plug status` orange on EACH pilot!
     for (rel, find, repl) in [
@@ -342,15 +356,30 @@ fn v2_posttool_concurrency_blind_quotes_spine_books_trace_prompt_review() {
     assert!(run_plug(&root, &["index"], None, &[], &[]).status.success());
     let log_s = run_plug(&root, &["search", "Antigravity", "--scope", "logs"], None, &[], &[]);
     assert!(String::from_utf8_lossy(&log_s.stdout).contains("2026-11-25"));
+    // (2026-11-25) The Stop hook syncs a new turn into the log and then catches the index up: searchable at once, boot panel not stale.
+    let more = format!("{}{}\n", fs::read_to_string(&claude_j).unwrap(), "{\"type\":\"user\",\"timestamp\":\"2026-11-25T11:00:00Z\",\"message\":{\"content\":\"Stop之后 TOKENSTOP 能搜到\"}}");
+    fs::write(&claude_j, more).unwrap();
+    let st = run_plug(&root, &["gate", "stop"], Some(&json!({"hook_event_name":"Stop","cwd":&rs}).to_string()), &[("PLUG_TRACE_SOURCES", &srcs)], &[]);
+    assert!(st.status.success() && fs::read_to_string(logs_dir.join("2026-11-25.md")).unwrap().contains("TOKENSTOP"), "Stop hook did not sync the new turn");
+    let st_s = run_plug(&root, &["search", "TOKENSTOP", "--scope", "logs", "--no-stale"], None, &[], &[]);
+    assert!(String::from_utf8_lossy(&st_s.stdout).contains("2026-11-25"), "Stop hook synced the log but left the index behind");
+    let panel = run_plug(&root, &["status"], None, &[], &[]);
+    assert!(!String::from_utf8_lossy(&panel.stdout).contains("STALE"), "boot panel stale right after Stop:\n{}", String::from_utf8_lossy(&panel.stdout));
 
     // 6. Prompt router + topic_pulse proactive trigger + plug review --topic H3
     let pr = run_plug(&root, &["gate", "prompt"], Some(&json!({"hook_event_name":"UserPromptSubmit","prompt":"再聊聊H3的运镜","cwd":&rs}).to_string()), &[], &[]);
     let pr_out = String::from_utf8_lossy(&pr.stdout);
     assert!(pr.status.success() && pr_out.contains("[hint] check self/memory/h3.md") && pr_out.contains("[topic_pulse]"), "prompt: {}", pr_out);
+    // (2026-11-25) Windows PowerShell 5.1 pipes a UTF-8 BOM; the payload must still be read.
+    let bom = format!("\u{feff}{}", json!({"hook_event_name":"UserPromptSubmit","prompt":"H3 again","cwd":&rs}));
+    let pb = run_plug(&root, &["gate", "prompt"], Some(&bom), &[], &[]);
+    assert!(String::from_utf8_lossy(&pb.stdout).contains("[hint] check self/memory/h3.md"), "a BOM-prefixed payload was dropped");
 
     let rev = run_plug(&root, &["review", "--since", "30d", "--topic", "H3", "--json", "--mark-reviewed"], None, &[], &[]);
     let rev_s = String::from_utf8_lossy(&rev.stdout);
     assert!(rev.status.success() && rev_s.contains("\"topic\": \"H3\"") && rev_s.contains("quote_reject"), "review: {}", rev_s);
+    let help = run_plug(&root, &["review", "--help"], None, &[], &[]);
+    assert!(String::from_utf8_lossy(&help.stdout).starts_with("usage: plug review"), "review --help ran a review");
 
     let _ = fs::remove_dir_all(&base);
 }

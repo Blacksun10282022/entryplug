@@ -1,5 +1,9 @@
 # STATUS
 
+## Changed on 2026-11-25, later (still v0.2.0 — fixes from a live worktree bench, D101)
+
+The owner's content repo ran a cold-start bench: one fresh `git worktree` per model × case, driven headless through Claude Code (`--effort max`) and the Antigravity CLI. What broke there and is now fixed is listed in D101. After the fixes: **3.05 MB** release, **3,399** production code lines (budget 3,400), `cargo test --offline` 6/6 PASS, and the new test for the Stop-hook index step fails without it. The Stop hook now also catches the index up after syncing the logs: ~0.1 s per turn (live: 0.14 s for the whole gate), and the boot panel no longer turns PATTERN ORANGE after every turn. The version stays 0.2.0 because content repos pin it in `plug.yaml`. Codex only gets the new `UserPromptSubmit` hook after `plug init --pilot codex` is run again and the hooks are trusted again.
+
 ## Changed on 2026-11-25 (v0.2.0 — Pure-Rust Core, D95–D100)
 
 The entire machine (CLI, read-only MCP server, all hooks/gates, cross-pilot trace sync, and review digest) is now a single statically linked Rust binary (`plug` / `plug.exe`, **3.04 MB** release, **3,362** production code lines in `src/`, bundled SQLite 3 + FTS5, zero Python/`jieba` runtime dependency).

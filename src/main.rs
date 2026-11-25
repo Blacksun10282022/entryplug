@@ -114,6 +114,7 @@ fn main() {
                     Ok(st) => { println!("trace sync: scanned {} file(s), {} turns across {} day(s), masked {} secret(s)", st.files_scanned, st.turns_written, st.days_touched, st.masked_hits); 0 }
                     Err(e) => { eprintln!("trace: {}", e); 1 }
                 },
+                "review" if rest.iter().any(|a| a == "--help" || a == "-h") => { println!("usage: plug review [--since 7d|30d|2w] [--topic <t>] [--json] [--mark-reviewed]"); 0 }
                 "review" => cmd::review::run(&cfg, flag_val(rest, &["--since"]).unwrap_or("7d"), flag_val(rest, &["--topic"]), rest.iter().any(|a| a == "--json"), rest.iter().any(|a| a == "--mark-reviewed")),
                 other => { eprintln!("plug: unknown command '{}'", other); 1 }
             }

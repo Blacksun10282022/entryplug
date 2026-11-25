@@ -349,7 +349,7 @@ pub fn run_contact(cfg: &Config, pilot_name: &str) -> i32 {
              json!({"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"self/RULES.md"},"cwd":&root_s})]
     };
     let denied_all = fakes.iter().all(|fk| {
-        spawn_io(&bin, &["gate", "pretool"], &cfg.root, &fk.to_string(), &[("PLUG_ROOT", &root_s)], &["KB_APPROVE"]).ok()
+        spawn_io(&bin, &["gate", "pretool"], &cfg.root, &fk.to_string(), &[("PLUG_ROOT", &root_s), ("PLUG_PROBE", "1")], &["KB_APPROVE"]).ok()
             .and_then(|(c, o, _)| (c == 0).then(|| serde_json::from_str::<Value>(o.trim()).ok()).flatten())
             .map(|v| if pilot == PilotKind::Antigravity { v.get("decision").and_then(|x| x.as_str()) == Some("deny") } else { v.pointer("/hookSpecificOutput/permissionDecision").and_then(|x| x.as_str()) == Some("deny") })
             .unwrap_or(false)

@@ -31,6 +31,8 @@ fn check_worktree_lock(cfg: &Config, call: &HookCall) -> Option<String> {
         }
     }
     if let Some(cmd) = &call.command {
+        // `2>&1`, `2>/dev/null`, `> $null` write nowhere: drop them, or every read that silences stderr reads as a write.
+        static RE_SAFE: OnceLock<Regex> = OnceLock::new(); let cmd = &RE_SAFE.get_or_init(|| Regex::new(r"(?i)\d?>&\d|\d?>>?\s*(?:/dev/null|\$null|nul)\b").unwrap()).replace_all(cmd, " ").into_owned();
         static RE_OP: OnceLock<Regex> = OnceLock::new();
         if RE_OP.get_or_init(|| Regex::new(r"(?i)(?:>>?|Set-Content|Out-File|Add-Content|\btee\b|\bsed\s+-i|\brm\b|\bRemove-Item|\bmv\b|\bMove-Item|\bcp\b|\bCopy-Item|write_text|write_bytes|shutil\.|git\s+checkout\s+--|git\s+restore)").unwrap()).is_match(cmd) {
             let (policy, _) = cfg.head_policy();
@@ -213,7 +215,10 @@ pub fn run_stop() -> i32 {
     let call = pilots::detect_and_parse_stdin(&util::read_stdin_if_piped());
     let Ok(cfg) = load_cfg_from_hint(call.as_ref().and_then(|c| c.cwd.as_deref())) else { return 0 };
     if cfg.plug_off() { return 0; }
-    if cfg.logs_rel.is_some() { let _ = pilots::trace::sync(&cfg, "all", false); }
+    // A linked worktree (`.git` is a file) is a copy: its `../archive` may be the real one, so it never syncs.
+    // The sync appends to today's log outside any edit tool, so the index is caught up right after (incremental, ~0.1 s);
+    // without it every turn left the next boot panel STALE / PATTERN ORANGE (2026-11-25).
+    if cfg.logs_rel.is_some() && !cfg.root.join(".git").is_file() { let _ = pilots::trace::sync(&cfg, "all", false); if cfg.index_path().is_file() { let _ = index::build(&cfg, false, false); } }
     let now_s = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
     let win_h: f64 = std::env::var("PLUG_RECORD_WINDOW").ok().and_then(|s| s.parse().ok()).unwrap_or(8.0);
     let since = call.as_ref().and_then(|c| c.transcript_path.as_deref()).and_then(|tp| fs::metadata(tp).ok()?.created().ok()?.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs_f64()).unwrap_or(now_s - win_h * 3600.0);

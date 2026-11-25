@@ -71,7 +71,7 @@ fn collect_file_paths(args: &Value, out: &mut Vec<String>) {
 fn jstr<'a>(v: &'a Value, k: &str) -> Option<&'a str> { v.get(k).and_then(|x| x.as_str()) }
 
 pub fn detect_and_parse_stdin(raw: &str) -> Option<HookCall> {
-    let val: Value = serde_json::from_str(raw.trim()).ok()?;
+    let val: Value = serde_json::from_str(raw.trim().trim_start_matches('\u{feff}')).ok()?;
     let obj = val.as_object()?;
     let cwd = jstr(&val, "cwd").map(String::from).or_else(|| val.get("workspacePaths").and_then(|v| v.as_array()).and_then(|a| a.first()).and_then(|v| v.as_str()).map(String::from));
     let transcript_path = jstr(&val, "transcript_path").map(String::from);
@@ -138,6 +138,7 @@ pub fn codex_hooks_json(cfg: &Config, bin: &str) -> Value {
     json!({"hooks": {
         "PreToolUse": [hgrp(Some(CODEX_PRETOOL_MATCHER), mk_cmd(bin, &["gate", "pretool"], false), 30)],
         "PostToolUse": [hgrp(Some(CODEX_POSTTOOL_MATCHER), mk_cmd(bin, &["gate", "posttool"], false), 10)],
+        "UserPromptSubmit": [hgrp(None, mk_cmd(bin, &["gate", "prompt"], false), 10)],
         "PreCompact": [hgrp(None, mk_cmd(bin, &["gate", "precompact"], false), 30)],
         "SessionStart": [hgrp(Some("startup|resume|clear"), mk_cmd(bin, &["--root", &root, "status", "--emit"], false), 30), hgrp(Some("compact"), mk_cmd(bin, &["gate", "precompact", "--emit"], false), 30)],
         "Stop": [hgrp(None, mk_cmd(bin, &["gate", "stop"], false), 20)]
@@ -190,7 +191,7 @@ pub fn codex_config_path() -> PathBuf { std::env::var_os("CODEX_HOME").map(PathB
 pub fn codex_trust_problem(cfg: &Config) -> Option<String> {
     let hooks = cfg.root.join(".codex").join("hooks.json");
     if !hooks.is_file() { return None; }
-    let (conf, fix) = (codex_config_path(), "open an interactive `codex` in this repo once and trust the hooks on `Hooks need review`.");
+    let (conf, fix) = (codex_config_path(), "open an interactive `codex` in this repo once and trust the hooks on `Hooks need review` (trust is kept per path: a copy or worktree needs its own).");
     let doc: toml::Value = std::fs::read_to_string(&conf).ok().and_then(|r| toml::from_str(&r).ok())?;
     let mut state: BTreeMap<String, &toml::Table> = BTreeMap::new();
     for (k, v) in doc.get("hooks").and_then(|v| v.get("state")).and_then(|v| v.as_table()).into_iter().flatten() {
@@ -259,6 +260,8 @@ pub fn audit_pilot(cfg: &Config, pilot: PilotKind) -> PilotAudit {
 pub fn precommit_path(root: &Path) -> PathBuf {
     let git_dir = std::fs::read_to_string(root.join(".git")).ok().and_then(|s| s.strip_prefix("gitdir:").map(|r| r.trim().to_string()))
         .map(|gd| { let p = PathBuf::from(gd); if p.is_absolute() { p } else { root.join(p) } }).unwrap_or_else(|| root.join(".git"));
+    // A linked worktree's gitdir has no hooks/ or config of its own: git uses the shared `commondir`.
+    let git_dir = std::fs::read_to_string(git_dir.join("commondir")).ok().map(|c| { let p = PathBuf::from(c.trim()); if p.is_absolute() { p } else { git_dir.join(p) } }).unwrap_or(git_dir);
     if let Ok(txt) = std::fs::read_to_string(git_dir.join("config")) {
         let mut in_core = false;
         for line in txt.lines().map(str::trim) {

@@ -90,7 +90,8 @@ fn file_mentions_repo(path: &Path, needle: &str) -> bool {
     let Ok(mut f) = File::open(path) else { return false };
     let mut buf = vec![0u8; 8192];
     let n = f.read(&mut buf).unwrap_or(0);
-    String::from_utf8_lossy(&buf[..n]).to_lowercase().contains(needle)
+    // The repo name must end there: `base` must not match a sibling copy named `base-wt-x`.
+    let s = String::from_utf8_lossy(&buf[..n]).to_lowercase(); s.match_indices(needle).any(|(i, m)| !s[i + m.len()..].starts_with(|c: char| c == '-' || c == '_' || c.is_alphanumeric()))
 }
 
 fn discover_sources(cfg: &Config, pf: &str) -> Vec<(String, PathBuf)> {

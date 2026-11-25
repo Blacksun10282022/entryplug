@@ -48,6 +48,8 @@ pub fn record_blind_commitment(cfg: &Config, rel: &str, text: &str, verdict: &st
 }
 
 pub fn log_event(cfg: &Config, event: &str, detail: &str, pilot: &str, topic: &str) {
+    // `plug check --contact` probes the gates on purpose; counting them as denials buried the real ones (44 of 48 on 2026-11-25).
+    if std::env::var("PLUG_PROBE").ok().as_deref() == Some("1") { return; }
     let p = telemetry_path(cfg);
     if let Some(par) = p.parent() { let _ = std::fs::create_dir_all(par); }
     if std::fs::metadata(&p).map(|m| m.len() >= MAX_TELEMETRY_BYTES).unwrap_or(false) {

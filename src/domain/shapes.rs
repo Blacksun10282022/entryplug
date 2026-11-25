@@ -80,7 +80,8 @@ pub fn section_blocks(lines: &[&str]) -> Vec<(String, usize, Vec<String>)> {
 pub fn sections(body: &str) -> BTreeMap<String, String> {
     let ls: Vec<&str> = body.lines().collect();
     let mut acc: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (h, _, v) in section_blocks(&ls) { acc.entry(h).or_default().extend(v); }
+    // `## 最强反证（对 B）` is still the `最强反证` section: a parenthetical gloss after a heading is not part of its name.
+    for (h, _, v) in section_blocks(&ls) { let k = h.split(['（', '(']).next().unwrap_or("").trim().to_string(); acc.entry(if k.is_empty() { h } else { k }).or_default().extend(v); }
     acc.into_iter().map(|(k, v)| (k, v.join("\n").trim().into())).collect()
 }
 pub fn links(body: &str) -> Vec<String> {

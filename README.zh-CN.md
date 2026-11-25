@@ -11,7 +11,7 @@ EntryPlug 是给 AI 编码 agent（Claude Code、Codex 与 Antigravity）加装�
 - **受保护文件。** 跨三驾驶员统一的 `PreToolUse` 工作区暴走锁、Claude Code 的 `permissions.deny` 与 Git `pre-commit` 钩子三层共同拦截对规则、事实、`plug.yaml` 及已登记装备的编辑与提交。agent 只能写一份 Unified Diff 改装申请，只有主人能批准落地。
 - **对外动作。** 同一个 `PreToolUse` 钩子（`plug gate pretool`）拦截常见对外写命令（`git push`、`gh`、HTTP POST、邮件、发布与发送类工具），已在 Claude Code、Codex 与 Antigravity 实机验证。它是绊线，不是沙箱：名单之外的代码仍可访问网络。
 
-实测数据（详见[怎么衡量](#怎么衡量)）：单文件 release 二进制 **3.04 MB**（生产 Rust 代码 **3,362 行**）；公开 50 题黄金集 recall@10 为 **0.98**（零外部中文分词器）；封锁、并发热索引与防泄露棘轮在 `cargo test --offline` 中约 6 秒全通。私有盲测中，带 EntryPlug 的回答在四个不同模型上各自 6/6 全胜（单一评委、作者自选题，局限见下文）。
+实测数据（详见[怎么衡量](#怎么衡量)）：单文件 release 二进制 **3.05 MB**（生产 Rust 代码 **3,399 行**）；公开 50 题黄金集 recall@10 为 **0.98**（零外部中文分词器）；封锁、并发热索引与防泄露棘轮在 `cargo test --offline` 中约 6 秒全通。私有盲测中，带 EntryPlug 的回答在四个不同模型上各自 6/6 全胜（单一评委、作者自选题，局限见下文）。
 
 本文其余部分沿用项目自己的词表：agent 叫**驾驶员**，个人规则与记录叫**素体**，专用工具叫**装备**，两条封锁叫**暴走封锁**和**出击封锁**。
 
@@ -223,7 +223,7 @@ RULES.md。不要跑 plug init。
 | 指标 | 结果 | 复现 | 截至 |
 |---|---|---|---|
 | C0–C4 验收、v2 门禁/并发与架构棘轮 | 6/6 Rust 测试套全通过（约 6 秒），0 警告 | `cargo test --offline` | 2026-11-25 |
-| 单文件体积 / 生产代码行数 | 3.04 MB（`<=4.0 MB`）· 3,362 行（`<=3,400`） | `cargo build --release --offline` | 2026-11-25 |
+| 单文件体积 / 生产代码行数 | 3.05 MB（`<=4.0 MB`）· 3,399 行（`<=3,400`） | `cargo build --release --offline` | 2026-11-25 |
 | 黄金集 recall@10 | 0.98（中文 0.96，英文 1.00），n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-25 |
 
 `tests/integration.rs` 将公开黄金集召回率压在 0.96 下限并断言中文召回永不为零；`tests/ratchets_and_noleak.rs` 自动守护 3,400 行代码红线、禁用符号与公仓防泄露规则。

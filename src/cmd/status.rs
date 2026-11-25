@@ -114,15 +114,16 @@ pub fn build_report(cfg: &Config) -> StatusReport {
         let mut st = con.prepare("SELECT due, doc FROM records WHERE kind='decision' AND due != '' AND due <= ?1 AND outcome = '' AND superseded_by = '' ORDER BY due ASC").ok()?;
         let rows: Vec<(String, String)> = st.query_map([util::today_iso()], |r| Ok((r.get(0)?, r.get(1)?))).ok()?.filter_map(Result::ok).collect();
         let (day, stem) = rows.first()?; let more = rows.len() - 1;
-        Some(format!("[--] {}{} due, no outcome yet: {}{} (due {}){} — settle {} by filling outcome",
+        Some(format!("[--] {}{} due, no outcome yet: {}{} (due {}){} — {} the owner's to give: check later records and logs, then ask him for what they do not show",
             dots("Records due", 20), rows.len(), if more > 0 { "oldest " } else { "" }, stem, day,
-            if more > 0 { format!(", and {} more", more) } else { String::new() }, if more > 0 { "them" } else { "it" }))
+            if more > 0 { format!(", and {} more", more) } else { String::new() }, if more > 0 { "their outcomes are" } else { "its outcome is" }))
     }).flatten();
     let rev = (!plug_off).then(|| {
         let mut notes: Vec<String> = Vec::new();
         let hot: Vec<String> = telemetry::list_topic_pulse(cfg).into_iter().filter(|tp| tp.sessions_since >= cfg.topic_pulse_sessions || tp.fragments_since >= cfg.topic_pulse_fragments).map(|tp| format!("{} ({}s/{}f)", tp.topic, tp.sessions_since, tp.fragments_since)).collect();
         if !hot.is_empty() { notes.push(format!("hot topics: {}", hot.join(", "))); }
-        if let Some(d) = telemetry::last_review_ts(cfg).and_then(|s| s.get(..10).and_then(shapes::parse_day)) { let days = (util::today() - d).num_days(); if days >= cfg.review_interval_days { notes.push(format!("{}d since last review", days)); } }
+        // Never reviewed but records exist counts as due too, or a new repo never gets its first nudge.
+        match telemetry::last_review_ts(cfg).and_then(|s| s.get(..10).and_then(shapes::parse_day)) { Some(d) => { let days = (util::today() - d).num_days(); if days >= cfg.review_interval_days { notes.push(format!("{}d since last review", days)); } } None => if store::open_ro(&cfg.index_path()).ok().and_then(|c| c.query_row("SELECT COUNT(*) FROM records", [], |r| r.get::<_, i64>(0)).ok()).unwrap_or(0) > 0 { notes.push("never reviewed".into()); } }
         (!notes.is_empty()).then(|| format!("[--] {}{} — run `plug review`", dots("Review due", 20), notes.join(" · ")))
     }).flatten();
     let mut ls = vec![

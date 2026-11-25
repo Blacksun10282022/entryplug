@@ -11,7 +11,7 @@ Both limits are enforced in code, not in the prompt:
 - **Protected files.** A unified `PreToolUse` worktree lock (across Claude Code, Codex and Antigravity), Claude Code `permissions.deny`, and a Git `pre-commit` hook refuse edits and commits to the person's rules, facts, `plug.yaml` and approved tools. The agent writes a Unified Diff refit request instead; only the owner can apply it.
 - **Outbound actions.** The same `PreToolUse` hook (`plug gate pretool`) refuses common outbound write commands (`git push`, `gh`, HTTP POST, mail, publish and send tools), verified in Claude Code, Codex and Antigravity. It is a tripwire, not a sandbox: code outside its list can still reach the network.
 
-Measured (details in [How it is measured](#how-it-is-measured)): release binary is **3.04 MB** (3,362 production Rust LOC); retrieval recall@10 is **0.98** on the public 50-case gold set with zero external segmenter; the locks, gates, concurrency, and no-leak ratchets pass `cargo test --offline` in ~6 s. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
+Measured (details in [How it is measured](#how-it-is-measured)): release binary is **3.05 MB** (3,399 production Rust LOC); retrieval recall@10 is **0.98** on the public 50-case gold set with zero external segmenter; the locks, gates, concurrency, and no-leak ratchets pass `cargo test --offline` in ~6 s. In a private blind benchmark, answers with EntryPlug were preferred on all six situations for each of four agent models (one judge, situations chosen by the author; caveats below).
 
 The rest of this README uses the project's own vocabulary: the agent is the **pilot**, the person's notes are the **Base**, their tools are **Equipment**, and the two limits are the **berserk lock** and the **sortie lock**.
 
@@ -224,7 +224,7 @@ Three things, three ways, never one number.
 | measure | result | reproduce | as of |
 |---|---|---|---|
 | C0–C4 acceptance, v2 gates, concurrency & ratchets | 6/6 Rust test suites PASS (~6 s), 0 warnings | `cargo test --offline` | 2026-11-25 |
-| release binary / production LOC | 3.04 MB (`<=4.0 MB`) · 3,362 LOC (`<=3,400`) | `cargo build --release --offline` | 2026-11-25 |
+| release binary / production LOC | 3.05 MB (`<=4.0 MB`) · 3,399 LOC (`<=3,400`) | `cargo build --release --offline` | 2026-11-25 |
 | gold-set recall@10 | 0.98 (Chinese 0.96, English 1.00), n=50 | `plug --root example-tool eval bench/public/goldset-sunzi.yaml` | 2026-11-25 |
 
 `tests/integration.rs` holds public gold-set recall at a floor of 0.96 and asserts that Chinese recall is never zero; `tests/ratchets_and_noleak.rs` enforces the 3,400 LOC budget, forbidden symbols, and public-repo no-leak checks.
