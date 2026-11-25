@@ -97,7 +97,9 @@ pub fn prepare_file(cfg: &Config, wf: &WalkFile, rule_ids: &HashSet<String>) -> 
     }
 
     let p = shapes::parse_file(&text, &wf.area);
-    if wf.area == "proposal" && cfg.is_excluded(&shapes::fm_str(&p.fm, "target")) { return None; }
+    if wf.area == "proposal" && cfg.is_excluded(&shapes::fm_str(&p.fm, "target")) {
+        return Some(PreparedFile { file: wf.rel.clone(), sha1, mtime_ns, size, area: wf.area.clone(), sub: wf.sub.clone(), tool: String::new(), doc: stem, chunks, record, edges });
+    }
     let doc = if wf.area == "manual" || wf.area == "reading" { format!("{}/{}", wf.tool, stem) } else { stem };
     let fm_sit = shapes::fm_str(&p.fm, "situation");
     let title = [shapes::fm_str(&p.fm, "title"), fm_sit.clone(), shapes::fm_str(&p.fm, "name")].into_iter().find(|s| !s.is_empty()).unwrap_or_else(|| doc.clone());
