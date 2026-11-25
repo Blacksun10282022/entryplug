@@ -2,13 +2,28 @@
 
 # entryplug · 插入栓
 
-entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出发工作，却从不改写它。三种文件形状，一个只读的搜索接口，两道由机器强制执行的封锁，一个自检。它不做判断，不做编排，也不会自己学习。随附一件孙子示例装备，所以验收脚本和一个可复现的基准测试都能在五分钟内跑完。这是我自己在用的东西。它不是一个通用产品。
+## 大白话
 
-*entryplug 是任何驾驶员（Claude Code、Codex 或 Antigravity）插入某个人的**素体**（规则、飞行记录、事实）、用那个人的**装备**（工具）作战时所插的那根插栓。主人从不驾驶；驾驶员从不改素体。这个模式叫**素体与装备**。*
+EntryPlug 是给 AI 编码 agent（Claude Code、Codex 与 Antigravity）加装的一层治理底座：一个纯 Rust 单文件命令行（`plug`）加一个只读 MCP 服务器（零 Python 或运行时依赖）。你把自己的规则、事实与过往判断写进个人仓库，agent 通过 MCP 检索并据此工作；EntryPlug 的职责是防止 agent 擅自改写它们，也防止它不问一声就以你的名义往外发东西。
+
+两条边界由代码强制执行，不靠提示词：
+
+- **受保护文件。** 跨三驾驶员统一的 `PreToolUse` 工作区暴走锁、Claude Code 的 `permissions.deny` 与 Git `pre-commit` 钩子三层共同拦截对规则、事实、`plug.yaml` 及已登记装备的编辑与提交。agent 只能写一份 Unified Diff 改装申请，只有主人能批准落地。
+- **对外动作。** 同一个 `PreToolUse` 钩子（`plug gate pretool`）拦截常见对外写命令（`git push`、`gh`、HTTP POST、邮件、发布与发送类工具），已在 Claude Code、Codex 与 Antigravity 实机验证。它是绊线，不是沙箱：名单之外的代码仍可访问网络。
+
+实测数据（详见[怎么衡量](#怎么衡量)）：单文件 release 二进制 **3.04 MB**（生产 Rust 代码 **3,362 行**）；公开 50 题黄金集 recall@10 为 **0.98**（零外部中文分词器）；封锁、并发热索引与防泄露棘轮在 `cargo test --offline` 中约 6 秒全通。私有盲测中，带 EntryPlug 的回答在四个不同模型上各自 6/6 全胜（单一评委、作者自选题，局限见下文）。
+
+本文其余部分沿用项目自己的词表：agent 叫**驾驶员**，个人规则与记录叫**素体**，专用工具叫**装备**，两条封锁叫**暴走封锁**和**出击封锁**。
+
+---
+
+entryplug 是一根插栓，它让编码 agent 从某一个人写下的判断出发工作，却从不改写它。三种文件形状，一个只读的搜索接口，两道由机器强制执行的封锁，一个自检。它不做判断，不做编排，也不会自己学习。随附一件孙子示例装备，所以自动化验收测试和一个可复现的基准测试都能在五分钟内跑完。这是我自己在用的东西。它不是一个通用产品。
+
+*entryplug 是任何驾驶员（Claude Code、Codex 或 Antigravity）插入某个人的**素体**（规则、记录、记忆、事实）、用那个人的**装备**（工具）作战时所插的那根插栓。主人从不驾驶；驾驶员从不改素体。这个模式叫**素体与装备**。*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-zh-dark.svg">
-  <img src="docs/architecture-zh-light.svg" width="100%" alt="架构：驾驶员（Claude Code、Codex 或 Antigravity）向机器查询；机器是只读的索引与搜索，读取素体（规则、飞行记录、事实）和装备（说明书与字典）。直接改规则会被暴走封锁（deny + pre-commit）拦下。记录和改装申请交给主人，只有主人批准并写入。任何对外的动作都会被出击封锁（一个钩子）拦下。">
+  <img src="docs/architecture-zh-light.svg" width="100%" alt="架构：驾驶员（Claude Code、Codex 或 Antigravity）向纯 Rust 单文件机器查询；机器提供只读 MCP 搜索，读取素体（规则、记录、记忆、事实）和装备（说明书与字典）。直接改受保护文件会被暴走封锁（PreToolUse 工作区锁 + deny + pre-commit）拦下。记录和 Unified Diff 改装申请交给主人，只有主人批准并写入。任何对外的动作都会被出击封锁（plug gate pretool）拦下。">
 </picture>
 
 有三样东西被衡量，用三种不同的方法，从不并成一个数：
@@ -118,7 +133,7 @@ RULES.md。不要跑 plug init。
 
 ![boot panel](docs/boot-panel.svg)
 
-上面这块面板是孙子示例装备出厂时、`plug init` 之前的样子。自检发现索引和素体是健康的（`[OK]`），两道封锁还没装（`[NG]`），末行的判定说该跑什么。面板报告的是它真正查到的东西：在内容仓里 `plug init` 会装上暴走封锁，出击封锁则在每个驾驶员信任了钩子之后各自变绿。在这些封锁装好之前报橙色，正是自检在起作用。
+上面这块面板是孙子示例装备出厂时、`plug init` 之前的样子。自检发现索引、素体、工作区和装备舱是健康的（`[OK]`），封锁还没装（`[NG]`），并写明了该跑什么（`plug init --pilot all`）。面板报告的是它真正查到的东西：在内容仓里 `plug init` 会装上暴走封锁，出击封锁则在每个驾驶员信任了钩子之后各自变绿。在这些封锁装好之前报橙色，正是自检在起作用。
 
 `plug init` 会把这块面板接到 SessionStart。手动接就是：
 
@@ -251,7 +266,7 @@ look first (anyone, anywhere):  plug apply proposals/pending/<file>.md --dry-run
 有些日子素体无关紧要，你就想要单纯的模型。要么在仓根放一个叫 **`.plug-off`** 的文件，要么直接说一声（“不用素体” 或 “leave the Base out of this one”）。
 
 - 会关掉的：出击封锁、压缩固定项、Stop 钩子记录提醒，全部直接放行。不查素体，没有打法目录，不催记录。
-- **不会**关掉的：deny 规则和 pre-commit。不管插栓在不在，受保护的文件仍然受保护。`.plug-off` 不会让任何人能改 `self/RULES.md`。
+- **不会**关掉的：暴走封锁（`PreToolUse` 工作区锁、deny 规则和 pre-commit）。不管插栓在不在，受保护的文件仍然受保护。`.plug-off` 不会让任何人能改 `self/RULES.md`。
 - `plug status` 会报告它在不在，所以你永远不用猜自己在哪个模式。删掉这个文件就重新插上。
 
 ### 在内容仓之外，带着插栓
@@ -289,4 +304,4 @@ docs/         DECISIONS · SHAPES · BENCH
 
 ## 许可与立场
 
-机器是 MIT，示例内容是 CC0。**开源，但不接受贡献**（SQLite 的说法）：带复现步骤的 bug 报告欢迎，功能请求不欢迎，fork 随意，没有路线图。只有验收脚本完整通过时才打标签；最后一次验证在 `STATUS.md`。
+机器是 MIT，示例内容是 CC0。**开源，但不接受贡献**（SQLite 的说法）：带复现步骤的 bug 报告欢迎，功能请求不欢迎，fork 随意，没有路线图。只有自动化验收测试完整通过时才打标签；最后一次验证在 `STATUS.md`。

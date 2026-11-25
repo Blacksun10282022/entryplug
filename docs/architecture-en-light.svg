@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
 <title id="title">entryplug architecture: Base and Equipment</title>
-<desc id="desc">The pilot (Claude Code, Codex or Antigravity) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny rules plus a pre-commit hook). The pilot writes records and refit requests instead; they go to the owner, the only one who approves and writes into the Base and Equipment. Anything outward is stopped by the sortie lock, a hook.</desc>
+<desc id="desc">The pilot (Claude Code, Codex or Antigravity) queries the machine, a single pure-Rust binary providing read-only MCP search over the Base (rules, records, memory, facts) and the Equipment (manuals and dictionaries). A direct change to protected files is stopped by the berserk lock (PreToolUse worktree lock, Claude deny rules, and git pre-commit). The pilot writes records and Unified Diff refit requests instead; they go to the owner, the only one who approves and writes into the Base and Equipment. Anything outward is stopped by the sortie lock (plug gate pretool).</desc>
 <style>
 .title{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;font-size:26px;font-weight:700;letter-spacing:-0.6px}
 .subt{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;font-size:18.5px}
@@ -82,7 +82,7 @@
 <path d="M958,382 V394 H946" fill="none" stroke="#818b98" stroke-width="1.4"/>
 <rect x="682" y="157" width="14" height="10" rx="2" fill="none" stroke="#cf222e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M685,157 v-3 a4,4 0 0 1 8,0 v3 M689,161 v2" fill="none" stroke="#cf222e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="704" y="162" class="kick" fill="#cf222e">BERSERK LOCK</text>
-<text x="704" y="181" class="small" fill="#59636e">deny + pre-commit</text>
+<text x="704" y="181" class="small" fill="#59636e">PreToolUse + deny + pre-commit</text>
 <path d="M678,192 H934" stroke="#d0d7de" stroke-dasharray="3 4"/>
 <rect x="672" y="143" width="266" height="44" rx="8" fill="#cf222e" fill-opacity="0.16" opacity="0" style="animation:f3 12s ease-in-out infinite both"/>
 <rect x="684" y="200" width="246" height="72" rx="10" fill="#ffffff" stroke="#d0d7de" stroke-width="1.4"/>
@@ -90,7 +90,7 @@
 <rect x="684" y="200" width="246" height="72" rx="10" fill="#bc4c00" fill-opacity="0.1" stroke="#bc4c00" stroke-width="1.8" opacity="0" style="animation:f5 12s ease-in-out infinite both"/>
 <path d="M702,214 h9 l5,5 v13 h-14 z M711,214 v5 h5 M705,224 h7 M705,228 h5" fill="none" stroke="#59636e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="728" y="228" class="kick" fill="#0969da">BASE</text>
-<text x="700" y="256" class="node" fill="#1f2328">rules · flight log · facts</text>
+<text x="700" y="256" class="node" fill="#1f2328">rules · records · memory · facts</text>
 <rect x="684" y="284" width="246" height="72" rx="10" fill="#ffffff" stroke="#d0d7de" stroke-width="1.4"/>
 <rect x="684" y="284" width="246" height="72" rx="10" fill="#1a7f37" fill-opacity="0.1" stroke="#1a7f37" stroke-width="1.8" opacity="0" style="animation:f6 12s ease-in-out infinite both"/>
 <rect x="684" y="284" width="246" height="72" rx="10" fill="#bc4c00" fill-opacity="0.1" stroke="#bc4c00" stroke-width="1.8" opacity="0" style="animation:f7 12s ease-in-out infinite both"/>
@@ -114,7 +114,7 @@
 <circle cx="414.9" cy="207.5" r="5.5" fill="none" stroke="#1a7f37" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M418.9,211.5 l5,5" fill="none" stroke="#1a7f37" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="484" y="214" class="kick" fill="#1a7f37" text-anchor="middle">THE MACHINE</text>
 <text x="472" y="239" class="node b" fill="#1f2328" text-anchor="middle">index + search</text>
-<text x="472" y="260" class="small" fill="#59636e" text-anchor="middle">read-only · proposes nothing</text>
+<text x="472" y="260" class="small" fill="#59636e" text-anchor="middle">pure Rust · read-only MCP</text>
 <rect x="354" y="432" width="236" height="44" rx="22.0" fill="#ffffff" stroke="#d0d7de" stroke-width="1.4"/>
 <rect x="354" y="432" width="236" height="44" rx="22.0" fill="#bc4c00" fill-opacity="0.1" stroke="#bc4c00" stroke-width="1.8" opacity="0" style="animation:f14 12s ease-in-out infinite both"/>
 <rect class="ringed" x="354" y="432" width="236" height="44" rx="22.0" fill="none" stroke="#bc4c00" stroke-width="1.5" vector-effect="non-scaling-stroke" opacity="0" style="animation:r15 12s ease-out infinite both"/>
@@ -135,7 +135,7 @@
 <rect x="48" y="352" width="212" height="58" rx="12" fill="#cf222e" fill-opacity="0.16" stroke="#cf222e" stroke-width="2.2" opacity="0" style="animation:f18 12s ease-in-out infinite both"/>
 <rect x="64" y="372" width="14" height="10" rx="2" fill="none" stroke="#cf222e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M67,372 v-3 a4,4 0 0 1 8,0 v3 M71,376 v2" fill="none" stroke="#cf222e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="88" y="376" class="kick" fill="#cf222e">SORTIE LOCK</text>
-<text x="88" y="394" class="small" fill="#59636e">a hook</text>
+<text x="88" y="394" class="small" fill="#59636e">plug gate pretool</text>
 <rect x="48" y="448" width="212" height="56" rx="12" fill="none" stroke="#818b98" stroke-width="1.3" stroke-dasharray="4 4"/>
 <path d="M72,461 h-6 v14 h14 v-6 M75,460 h6 v6 M81,460 l-8,8" fill="none" stroke="#59636e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="92" y="472" class="node" fill="#59636e">anything outward</text>

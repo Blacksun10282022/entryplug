@@ -17,13 +17,13 @@ The rest of this README uses the project's own vocabulary: the agent is the **pi
 
 ---
 
-entryplug is the plug that lets a coding agent work from one person's written judgment without ever rewriting it. Three file shapes, one read-only search interface, two machine-enforced locks, one self-check. It does not judge, it does not orchestrate, and it does not learn on its own. A Sunzi example equipment ships with it, so the acceptance script and a reproducible benchmark both run in five minutes. This is something I use myself. It is not a general-purpose product.
+entryplug is the plug that lets a coding agent work from one person's written judgment without ever rewriting it. Three file shapes, one read-only search interface, two machine-enforced locks, one self-check. It does not judge, it does not orchestrate, and it does not learn on its own. A Sunzi example equipment ships with it, so the automated acceptance suite and a reproducible benchmark both run in five minutes. This is something I use myself. It is not a general-purpose product.
 
-*Entryplug is the plug any pilot (Claude Code, Codex or Antigravity) inserts into one person's **Base** (rules, flight log, facts) to fight with that person's **Equipment** (tools). The owner never pilots; the pilot never edits the Base. The pattern is called **Base and Equipment**.*
+*Entryplug is the plug any pilot (Claude Code, Codex or Antigravity) inserts into one person's **Base** (rules, records, memory, facts) to fight with that person's **Equipment** (tools). The owner never pilots; the pilot never edits the Base. The pattern is called **Base and Equipment**.*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-en-dark.svg">
-  <img src="docs/architecture-en-light.svg" width="100%" alt="Architecture: the pilot (Claude Code, Codex or Antigravity) queries the machine, a read-only index and search over the Base (rules, flight log, facts) and the Equipment (manuals and dictionaries). A direct change to the rules is stopped by the berserk lock (deny + pre-commit). Records and refit requests go to the owner, the only one who approves and writes. Anything outward is stopped by the sortie lock, a hook.">
+  <img src="docs/architecture-en-light.svg" width="100%" alt="Architecture: the pilot (Claude Code, Codex or Antigravity) queries the pure-Rust machine, a read-only MCP index and search over the Base (rules, records, memory, facts) and the Equipment (manuals and dictionaries). A direct change to protected files is stopped by the berserk lock (PreToolUse worktree lock + deny + pre-commit). Records and Unified Diff refit requests go to the owner, the only one who approves and writes. Anything outward is stopped by the sortie lock (plug gate pretool).">
 </picture>
 
 Three things are measured, three separate ways, and never mixed into one number:
@@ -134,7 +134,7 @@ A Base the model wrote on its own holds the model's judgment, not yours; the loc
 
 ![boot panel](docs/boot-panel.svg)
 
-The panel above is the Sunzi example equipment as it ships, before `plug init`. The self-check finds the index and the Base healthy (`[OK]`) and the two locks not installed (`[NG]`), and the verdict line names what to run. The panel reports whatever it actually finds: `plug init` in a content repo arms the berserk lock, and the sortie lock arms per pilot once that pilot has trusted the hooks. Reporting orange until those locks are armed is the self-check doing its job.
+The panel above is the Sunzi example equipment as it ships, before `plug init`. The self-check finds the index, the Base, the worktree, and the equipment bay healthy (`[OK]`) and the locks not installed (`[NG]`), and names what to run (`plug init --pilot all`). The panel reports whatever it actually finds: `plug init` in a content repo arms the berserk lock, and the sortie lock arms per pilot once that pilot has trusted the hooks. Reporting orange until those locks are armed is the self-check doing its job.
 
 `plug init` wires the panel into SessionStart. By hand it is:
 
@@ -267,7 +267,7 @@ Why two forms: inside Claude Code or Codex the `!` prefix runs the command in th
 Some days the Base is beside the point and you want the plain model. Either put a file called **`.plug-off`** at the repo root, or just say so ("不用素体" or "leave the Base out of this one").
 
 - What turns off: the sortie lock, the compaction pin and the Stop-hook record reminder all pass straight through. No Base lookups, no playbook directory, no record nagging.
-- What does **not** turn off: the deny rules and pre-commit. Protected files stay protected whether or not the plug is in. Nothing about `.plug-off` lets anyone edit `self/RULES.md`.
+- What does **not** turn off: the berserk lock (`PreToolUse` worktree lock, deny rules and pre-commit). Protected files stay protected whether or not the plug is in. Nothing about `.plug-off` lets anyone edit `self/RULES.md`.
 - `plug status` reports whether it is there, so you never wonder which mode you are in. Delete the file to plug back in.
 
 ### Outside the content repo, with the plug
@@ -305,4 +305,4 @@ No model training, no LLM scoring of judgments, no total score; no agent runtime
 
 ## Licence and stance
 
-The machine is MIT, the example content CC0. **Open source, not open contribution** (SQLite's phrasing): bug reports with reproduction steps are welcome, feature requests are not, forks are fine, there is no roadmap. Tags are cut only when the acceptance script passes in full; the last verification is in `STATUS.md`.
+The machine is MIT, the example content CC0. **Open source, not open contribution** (SQLite's phrasing): bug reports with reproduction steps are welcome, feature requests are not, forks are fine, there is no roadmap. Tags are cut only when the automated acceptance suite passes in full; the last verification is in `STATUS.md`.

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
 <title id="title">entryplug 架构：素体与装备</title>
-<desc id="desc">驾驶员（Claude Code、Codex 或 Antigravity）向机器查询；机器是只读的索引与搜索，读取素体（规则、飞行记录、事实）和装备（说明书与字典）。直接改规则会被暴走封锁（deny 规则加 pre-commit 钩子）拦下。驾驶员改为写记录和改装申请，交给主人；主人是唯一的批准者，由他写入素体和装备。任何对外的动作都会被出击封锁（一个钩子）拦下。</desc>
+<desc id="desc">驾驶员（Claude Code、Codex 或 Antigravity）向机器查询；机器是纯 Rust 单文件二进制，提供只读 MCP 搜索，读取素体（规则、记录、记忆、事实）和装备（说明书与字典）。直接改受保护文件会被暴走封锁（三驾驶员统一的 PreToolUse 工作区锁、Claude deny 规则加 pre-commit 钩子）拦下。驾驶员改为写记录和 Unified Diff 改装申请，交给主人；主人是唯一的批准者，由他写入素体和装备。任何对外的动作都会被出击封锁（plug gate pretool）拦下。</desc>
 <style>
 .title{font-family:'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;font-size:26px;font-weight:700;letter-spacing:0.5px}
 .subt{font-family:'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;font-size:18.5px}
@@ -82,7 +82,7 @@
 <path d="M958,382 V394 H946" fill="none" stroke="#6e7681" stroke-width="1.4"/>
 <rect x="682" y="157" width="14" height="10" rx="2" fill="none" stroke="#f85149" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M685,157 v-3 a4,4 0 0 1 8,0 v3 M689,161 v2" fill="none" stroke="#f85149" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="704" y="162" class="kick" fill="#f85149">暴走封锁</text>
-<text x="704" y="181" class="small" fill="#8b949e">deny + pre-commit</text>
+<text x="704" y="181" class="small" fill="#8b949e">PreToolUse + deny + pre-commit</text>
 <path d="M678,192 H934" stroke="#3d444d" stroke-dasharray="3 4"/>
 <rect x="672" y="143" width="266" height="44" rx="8" fill="#f85149" fill-opacity="0.16" opacity="0" style="animation:f3 12s ease-in-out infinite both"/>
 <rect x="684" y="200" width="246" height="72" rx="10" fill="#0d1117" stroke="#3d444d" stroke-width="1.4"/>
@@ -90,7 +90,7 @@
 <rect x="684" y="200" width="246" height="72" rx="10" fill="#f0883e" fill-opacity="0.14" stroke="#f0883e" stroke-width="1.8" opacity="0" style="animation:f5 12s ease-in-out infinite both"/>
 <path d="M702,214 h9 l5,5 v13 h-14 z M711,214 v5 h5 M705,224 h7 M705,228 h5" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="728" y="228" class="kick" fill="#58a6ff">素体</text>
-<text x="700" y="256" class="node" fill="#e6edf3">规则 · 飞行记录 · 事实</text>
+<text x="700" y="256" class="node" fill="#e6edf3">规则 · 记录 · 记忆 · 事实</text>
 <rect x="684" y="284" width="246" height="72" rx="10" fill="#0d1117" stroke="#3d444d" stroke-width="1.4"/>
 <rect x="684" y="284" width="246" height="72" rx="10" fill="#3fb950" fill-opacity="0.14" stroke="#3fb950" stroke-width="1.8" opacity="0" style="animation:f6 12s ease-in-out infinite both"/>
 <rect x="684" y="284" width="246" height="72" rx="10" fill="#f0883e" fill-opacity="0.14" stroke="#f0883e" stroke-width="1.8" opacity="0" style="animation:f7 12s ease-in-out infinite both"/>
@@ -114,7 +114,7 @@
 <circle cx="451.5" cy="207.5" r="5.5" fill="none" stroke="#3fb950" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M455.5,211.5 l5,5" fill="none" stroke="#3fb950" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="484" y="214" class="kick" fill="#3fb950" text-anchor="middle">机器</text>
 <text x="472" y="239" class="node b" fill="#e6edf3" text-anchor="middle">索引 + 搜索</text>
-<text x="472" y="260" class="small" fill="#8b949e" text-anchor="middle">只读 · 自己不提任何建议</text>
+<text x="472" y="260" class="small" fill="#8b949e" text-anchor="middle">纯 Rust 单文件 · 只读 MCP</text>
 <rect x="354" y="432" width="236" height="44" rx="22.0" fill="#0d1117" stroke="#3d444d" stroke-width="1.4"/>
 <rect x="354" y="432" width="236" height="44" rx="22.0" fill="#f0883e" fill-opacity="0.14" stroke="#f0883e" stroke-width="1.8" opacity="0" style="animation:f14 12s ease-in-out infinite both"/>
 <rect class="ringed" x="354" y="432" width="236" height="44" rx="22.0" fill="none" stroke="#f0883e" stroke-width="1.5" vector-effect="non-scaling-stroke" opacity="0" style="animation:r15 12s ease-out infinite both"/>
@@ -135,7 +135,7 @@
 <rect x="48" y="352" width="212" height="58" rx="12" fill="#f85149" fill-opacity="0.16" stroke="#f85149" stroke-width="2.2" opacity="0" style="animation:f18 12s ease-in-out infinite both"/>
 <rect x="64" y="372" width="14" height="10" rx="2" fill="none" stroke="#f85149" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M67,372 v-3 a4,4 0 0 1 8,0 v3 M71,376 v2" fill="none" stroke="#f85149" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="88" y="376" class="kick" fill="#f85149">出击封锁</text>
-<text x="88" y="394" class="small" fill="#8b949e">一个钩子</text>
+<text x="88" y="394" class="small" fill="#8b949e">plug gate pretool</text>
 <rect x="48" y="448" width="212" height="56" rx="12" fill="none" stroke="#6e7681" stroke-width="1.3" stroke-dasharray="4 4"/>
 <path d="M72,461 h-6 v14 h14 v-6 M75,460 h6 v6 M81,460 l-8,8" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="92" y="472" class="node" fill="#8b949e">任何对外的动作</text>
