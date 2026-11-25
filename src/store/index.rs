@@ -51,7 +51,7 @@ fn chunk_lines(text: &str, base: usize, doc: &str, title: &str, file: &str, scop
     if !lines.is_empty() { flush(&mut cur, sl, base + lines.len() - 1); }
 }
 
-pub fn prepare_file(wf: &WalkFile, rule_ids: &HashSet<String>) -> Option<PreparedFile> {
+pub fn prepare_file(cfg: &Config, wf: &WalkFile, rule_ids: &HashSet<String>) -> Option<PreparedFile> {
     let text = fs::read_to_string(&wf.path).ok()?;
     let (mtime_ns, size, sha1) = (wf.mtime_ns, wf.size, util::sha1_hex(text.as_bytes()));
     let stem = wf.path.file_stem().and_then(|s| s.to_str()).unwrap_or("doc").to_string();
@@ -97,6 +97,7 @@ pub fn prepare_file(wf: &WalkFile, rule_ids: &HashSet<String>) -> Option<Prepare
     }
 
     let p = shapes::parse_file(&text, &wf.area);
+    if wf.area == "proposal" && cfg.is_excluded(&shapes::fm_str(&p.fm, "target")) { return None; }
     let doc = if wf.area == "manual" || wf.area == "reading" { format!("{}/{}", wf.tool, stem) } else { stem };
     let fm_sit = shapes::fm_str(&p.fm, "situation");
     let title = [shapes::fm_str(&p.fm, "title"), fm_sit.clone(), shapes::fm_str(&p.fm, "name")].into_iter().find(|s| !s.is_empty()).unwrap_or_else(|| doc.clone());
@@ -124,16 +125,18 @@ pub fn prepare_file(wf: &WalkFile, rule_ids: &HashSet<String>) -> Option<Prepare
         });
     }
     let (fm_lines, body_ls, mut seq) = (text.lines().count().saturating_sub(p.body.lines().count()), p.body.lines().collect::<Vec<_>>(), 0usize);
+    let scope = if wf.area == "proposal" { "proposals" } else { "tools" };
     let htt = tokenize::tokenize_text(&format!("{} {} {} {} {}", title, shapes::fm_list(&p.fm, "aliases").join(" "), fm_sit, shapes::fm_str(&p.fm, "verdict"), topic));
     for (h, sb, ls) in shapes::section_blocks(&body_ls) {
+        if wf.area == "proposal" && h != "为什么" && h != "最强反证" { continue; }
         let bs = ls.join("\n"); let tr = bs.trim();
         if tr.is_empty() && h.is_empty() { continue; }
         seq += 1;
         let lstart = fm_lines + sb + 1;
         let ex = if h.is_empty() { tr.into() } else { format!("{} · {}", h, tr) };
-        push_chunk(&mut chunks, format!("{}#{}", doc, seq), &doc, &title, &wf.rel, lstart, lstart + ls.len().saturating_sub(1), h.clone(), "tools", &tool, &kind, &date, &topic, compact_excerpt(&ex), if seq == 1 { htt.clone() } else { String::new() }, tokenize::tokenize_text(&format!("{}\n{}", h, tr)));
+        push_chunk(&mut chunks, format!("{}#{}", doc, seq), &doc, &title, &wf.rel, lstart, lstart + ls.len().saturating_sub(1), h.clone(), scope, &tool, &kind, &date, &topic, compact_excerpt(&ex), if seq == 1 { htt.clone() } else { String::new() }, tokenize::tokenize_text(&format!("{}\n{}", h, tr)));
     }
-    if chunks.is_empty() { push_chunk(&mut chunks, format!("{}#1", doc), &doc, &title, &wf.rel, 1, text.lines().count().max(1), String::new(), "tools", &tool, &kind, &date, &topic, compact_excerpt(&title), htt.clone(), htt); }
+    if chunks.is_empty() && wf.area != "proposal" { push_chunk(&mut chunks, format!("{}#1", doc), &doc, &title, &wf.rel, 1, text.lines().count().max(1), String::new(), scope, &tool, &kind, &date, &topic, compact_excerpt(&title), htt.clone(), htt); }
     Some(PreparedFile { file: wf.rel.clone(), sha1, mtime_ns, size, area: wf.area.clone(), sub: wf.sub.clone(), tool, doc, chunks, record, edges })
 }
 
@@ -205,7 +208,7 @@ fn dedup_corpus(files: Vec<WalkFile>) -> Vec<WalkFile> {
     files.into_iter().enumerate().filter_map(|(i, f)| keep[i].then_some(f)).collect()
 }
 
-fn sync_db(db_path: &Path, files: Vec<WalkFile>, rule_ids: &HashSet<String>, st_tbl: bool, full: bool, saved_pulse: Vec<store::telemetry::TopicPulseRow>) -> Result<(Connection, usize, usize, usize, usize, usize), String> {
+fn sync_db(cfg: &Config, db_path: &Path, files: Vec<WalkFile>, rule_ids: &HashSet<String>, st_tbl: bool, full: bool, saved_pulse: Vec<store::telemetry::TopicPulseRow>) -> Result<(Connection, usize, usize, usize, usize, usize), String> {
     let need_full = full || !db_path.exists() || !store::open_ro(db_path).map(|c| store::is_v2_schema(&c)).unwrap_or(false);
     if need_full && db_path.exists() {
         let _ = fs::remove_file(db_path);
@@ -229,7 +232,7 @@ fn sync_db(db_path: &Path, files: Vec<WalkFile>, rule_ids: &HashSet<String>, st_
     let (mut to_parse, mut skipped) = (Vec::new(), 0);
     for wf in files { if existing.get(&wf.rel) == Some(&(wf.mtime_ns, wf.size)) { skipped += 1; } else { to_parse.push(wf); } }
     let pool = rayon::ThreadPoolBuilder::new().num_threads(std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(8)).build().map_err(|e| e.to_string())?;
-    let prepared: Vec<PreparedFile> = pool.install(|| to_parse.par_iter().filter_map(|wf| prepare_file(wf, rule_ids)).collect());
+    let prepared: Vec<PreparedFile> = pool.install(|| to_parse.par_iter().filter_map(|wf| prepare_file(cfg, wf, rule_ids)).collect());
 
     let tx = con.transaction().map_err(|e| e.to_string())?;
     for rel in &removed { delete_file_rows(&tx, rel, st_tbl)?; }
@@ -253,7 +256,7 @@ pub fn build(cfg: &Config, full: bool, include_books_full: bool) -> Result<Build
     if !cfg.shape_ok() { return Err(format!("unknown shape_version {} (supported: {:?})", cfg.shape_version, config::SUPPORTED_SHAPES)); }
     let saved_pulse = if (full || !cfg.index_path().exists()) && cfg.index_path().exists() { store::telemetry::list_topic_pulse(cfg) } else { Vec::new() };
     let rule_ids = fs::read_to_string(cfg.self_dir().join("RULES.md")).map(|t| shapes::parse_rules(&t).ids).unwrap_or_default();
-    let (con, indexed, skipped, removed, total_docs, total_chunks) = sync_db(&cfg.index_path(), walk_indexable(cfg), &rule_ids, true, full, saved_pulse)?;
+    let (con, indexed, skipped, removed, total_docs, total_chunks) = sync_db(cfg, &cfg.index_path(), walk_indexable(cfg), &rule_ids, true, full, saved_pulse)?;
 
     let mut amap = tokenize::load_standalone_aliases(cfg);
     for t in &cfg.tools {
@@ -269,7 +272,7 @@ pub fn build(cfg: &Config, full: bool, include_books_full: bool) -> Result<Build
     let aj: BTreeMap<String, Vec<String>> = amap.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect();
     con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES('aliases', ?1)", [serde_json::to_string(&aj).unwrap_or_else(|_| "{}".into())]).map_err(|e| e.to_string())?;
     let (bi, bc) = if !cfg.books.is_empty() && (include_books_full || !cfg.books_index_path().exists() || !full) {
-        let (_, i, _, _, _, c) = sync_db(&cfg.books_index_path(), config::walk_books(cfg), &HashSet::new(), false, include_books_full, Vec::new())?; (i, c)
+        let (_, i, _, _, _, c) = sync_db(cfg, &cfg.books_index_path(), config::walk_books(cfg), &HashSet::new(), false, include_books_full, Vec::new())?; (i, c)
     } else { (0, 0) };
     write_index_md(cfg, &con)?; write_playbooks_indices(cfg)?; mirror_skills(cfg)?;
     Ok(BuildStats { indexed_files: indexed, skipped_files: skipped, removed_files: removed, total_docs, total_chunks, books_indexed: bi, books_chunks: bc })
@@ -287,7 +290,7 @@ pub fn index_one_file(cfg: &Config, rel: &str) -> Result<bool, String> {
         if m.is_file() {
             let (mtime_ns, size) = config::meta_stat(&m);
             let rids = fs::read_to_string(cfg.self_dir().join("RULES.md")).map(|t| shapes::parse_rules(&t).ids).unwrap_or_default();
-            if let Some(pf) = prepare_file(&WalkFile { path, rel: rel.into(), area, sub, tool, mtime_ns, size }, &rids) {
+            if let Some(pf) = prepare_file(cfg, &WalkFile { path, rel: rel.into(), area, sub, tool, mtime_ns, size }, &rids) {
                 insert_prepared(&tx, &pf, true)?;
                 if pf.record.is_some() { resolve_supersedes(&tx)?; }
             }
