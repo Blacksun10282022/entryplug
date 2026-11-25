@@ -106,8 +106,9 @@ fn main() {
                 "init" => cmd::init::run(&cfg, flag_val(rest, &["--pilot"]).unwrap_or("all"), rest.iter().any(|a| a == "--link-skills"), rest.iter().any(|a| a == "--print")),
                 "eval" => {
                     let k = flag_val(rest, &["-k", "--k"]).and_then(|s| s.parse().ok()).unwrap_or(10);
-                    let gs = rest.iter().enumerate().find(|(idx, a)| !a.starts_with('-') && (*idx == 0 || !matches!(rest[idx - 1].as_str(), "-k" | "--k"))).map(|(_, a)| a.as_str());
-                    match gs { Some(p) => cmd::eval::run(&cfg, Path::new(p), k), None => { eprintln!("usage: plug eval <goldset>"); 1 } }
+                    let scope = flag_val(rest, &["--scope"]);
+                    let gs = rest.iter().enumerate().find(|(idx, a)| !a.starts_with('-') && (*idx == 0 || !matches!(rest[idx - 1].as_str(), "-k" | "--k" | "--scope"))).map(|(_, a)| a.as_str());
+                    match gs { Some(p) => cmd::eval::run(&cfg, Path::new(p), k, scope), None => { eprintln!("usage: plug eval [--scope <scope>] [-k N] <goldset>"); 1 } }
                 }
                 "trace" => match pilots::trace::sync(&cfg, flag_val(rest, &["--pilot"]).unwrap_or("all"), rest.iter().any(|a| a == "--dry-run")) {
                     Ok(st) => { println!("trace sync: scanned {} file(s), {} turns across {} day(s), masked {} secret(s)", st.files_scanned, st.turns_written, st.days_touched, st.masked_hits); 0 }

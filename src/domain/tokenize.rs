@@ -75,7 +75,15 @@ pub fn build_fts_queries(raw: &str, aliases: &HashMap<String, Vec<String>>) -> (
     }
     flush(&mut cjk, &mut asc, &mut short_terms, &mut long_runs);
     if long_runs.is_empty() {
-        let parts: Vec<String> = short_terms.iter().filter_map(|t| expand_term(t, aliases)).collect();
+        let mut parts: Vec<String> = Vec::new();
+        let mut covered = String::new();
+        for k in aliases.keys().filter(|k| k.contains(' ') && q_low.contains(&k.to_lowercase())) {
+            if let Some(e) = expand_term(k, aliases) { if !parts.contains(&e) { parts.push(e); covered.push(' '); covered.push_str(&k.to_lowercase()); } }
+        }
+        let non_stop: Vec<&String> = short_terms.iter().filter(|t| !STOP_WORDS.contains(&t.as_str()) && !covered.split_whitespace().any(|w| w == t.as_str())).collect();
+        for t in if !non_stop.is_empty() || !parts.is_empty() { non_stop } else { short_terms.iter().collect() } {
+            if let Some(e) = expand_term(t, aliases) { if !parts.contains(&e) { parts.push(e); } }
+        }
         return if parts.is_empty() { (None, None) } else { (Some(parts.join(" ")), (parts.len() > 1).then(|| parts.join(" OR "))) };
     }
     let mut bag: Vec<String> = Vec::new();

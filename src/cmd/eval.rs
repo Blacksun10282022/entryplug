@@ -25,7 +25,10 @@ fn load_cases(path: &Path) -> Result<Vec<EvalCase>, String> {
             if !t.starts_with('|') { return None; }
             let c: Vec<&str> = t.trim_matches('|').split('|').map(str::trim).collect();
             if c.len() < 4 || !c[0].starts_with('G') || c[0].len() < 2 || !c[0][1..].chars().all(|ch| ch.is_ascii_digit()) { return None; }
-            let expect: Vec<String> = re_bv.find_iter(c[3]).map(|m| m.as_str().into()).collect();
+            let mut expect: Vec<String> = re_bv.find_iter(c[3]).map(|m| m.as_str().into()).collect();
+            if c[3].contains("系列任一") {
+                if let Some(s) = c[3].split('《').nth(1).and_then(|r| r.split('》').next()).filter(|s| !s.is_empty()) { expect.push(format!("《{}》", s)); }
+            }
             if c[2].is_empty() || expect.is_empty() { return None; }
             let any_match = expect.len() > 1 || c[3].contains("任一") || c[3].contains("另有");
             Some(EvalCase { id: c[0].into(), queries: vec![c[2].into()], expect, any_match, lang: if tokenize::has_cjk(c[2]) { "zh" } else { "en" }.into(), scope: "corpus".into(), per_doc: 1 })
@@ -49,7 +52,7 @@ fn load_cases(path: &Path) -> Result<Vec<EvalCase>, String> {
     }).collect())
 }
 
-pub fn run(cfg: &Config, goldset: &Path, k: usize) -> i32 {
+pub fn run(cfg: &Config, goldset: &Path, k: usize, scope_override: Option<&str>) -> i32 {
     let cases = match load_cases(goldset) {
         Ok(c) if !c.is_empty() => c,
         Ok(_) => { println!("eval: the gold set has no cases"); return 1; }
@@ -57,9 +60,10 @@ pub fn run(cfg: &Config, goldset: &Path, k: usize) -> i32 {
     };
     let mut results = Vec::new();
     for c in cases {
-        let opts = SearchOpts { queries: c.queries, scope: c.scope, k, per_doc: c.per_doc, check_stale: false, record_telemetry: false, ..Default::default() };
+        let scope = scope_override.map(String::from).unwrap_or(c.scope);
+        let opts = SearchOpts { queries: c.queries, scope, k, per_doc: c.per_doc, check_stale: false, record_telemetry: false, ..Default::default() };
         let res = match search::search(cfg, &opts) { Ok(r) => r, Err(e) => { println!("eval: {}", e); return 1; } };
-        let hits: HashSet<String> = res.rows.iter().flat_map(|r| [r.doc.clone(), r.id.clone()]).collect();
+        let hits: HashSet<String> = res.rows.iter().flat_map(|r| [r.doc.clone(), r.id.clone(), r.title.clone()]).collect();
         let exp: HashSet<String> = c.expect.into_iter().collect();
         let matched = exp.iter().filter(|e| hits.contains(*e) || hits.iter().any(|h| h.contains(e.as_str()))).count();
         let rec = if exp.is_empty() { 0.0 } else if c.any_match { if matched > 0 { 1.0 } else { 0.0 } } else { matched as f64 / exp.len() as f64 };
