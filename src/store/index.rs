@@ -60,7 +60,7 @@ pub fn prepare_file(wf: &WalkFile, rule_ids: &HashSet<String>) -> Option<Prepare
     if wf.area == "corpus" || wf.area == "book" {
         let d = shapes::parse_doc(&text, &wf.path);
         let scope = if wf.area == "book" { "books" } else { "corpus" };
-        let ttok = tokenize::tokenize_text(&format!("{} {} {}", d.title, d.series, d.speaker));
+        let ttok = tokenize::tokenize_text(&if wf.area == "book" { format!("{} {} {} {}", d.title, stem, d.series, d.speaker) } else { format!("{} {} {}", d.title, d.series, d.speaker) });
         if d.units.len() > 1 {
             let (mut cur, mut ls, mut le, mut fpos, mut seq) = (String::new(), 0, 0, String::new(), 0usize);
             let mut flush = |c: &mut String, fp: &mut String, ls: usize, le: usize| {

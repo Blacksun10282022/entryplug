@@ -238,7 +238,9 @@ pub fn parse_doc(text: &str, path: &Path) -> ParsedDoc {
         meta.entry("kind".into()).or_insert_with(|| if is_lec { "lecture" } else { "text" }.into());
     } else { units.push((1, lines.len().max(1), String::new(), lines.join("\n"))); }
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("doc").to_string();
-    let title = meta.get("title").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| lines.first().map(|l| l.trim_start_matches("# ").trim().into()).filter(|s: &String| !s.is_empty()).unwrap_or_else(|| stem.clone()));
+    let is_junk_head = |s: &str| s.is_empty() || (s.starts_with("---") && s.ends_with("---")) || (s.starts_with("===") && s.ends_with("===")) || s.starts_with("/tmp/");
+    let title = meta.get("title").cloned().filter(|s| !s.is_empty())
+        .unwrap_or_else(|| lines.first().map(|l| l.trim_start_matches("# ").trim()).filter(|s| !is_junk_head(s)).map(String::from).unwrap_or_else(|| stem.clone()));
     let id = meta.get("id").cloned().filter(|s| !s.is_empty()).unwrap_or(stem);
     let series = meta.get("series").cloned().filter(|s| !s.is_empty()).unwrap_or_else(|| re_ser.captures(&title).and_then(|c| c.get(1).or_else(|| c.get(2))).map(|m| m.as_str().trim().into()).unwrap_or_default());
     let joined = units.iter().map(|u| u.3.as_str()).collect::<Vec<_>>().join("\n");

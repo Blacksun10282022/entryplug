@@ -17,6 +17,11 @@ struct ReviewDigest {
     top_zero_hits: Vec<(String, usize)>, quote_rejections: Vec<String>,
 }
 
+fn clip(s: &str, n: usize) -> String {
+    let cs: Vec<char> = s.split_whitespace().collect::<Vec<_>>().join(" ").chars().collect();
+    if cs.len() <= n { cs.into_iter().collect() } else { format!("{}…", cs[..n].iter().collect::<String>()) }
+}
+
 pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, mark_reviewed: bool) -> i32 {
     let s = since.trim().to_lowercase();
     let days = s.strip_suffix('d').and_then(|n| n.parse::<i64>().ok()).or_else(|| s.strip_suffix('w').and_then(|n| n.parse::<i64>().ok()).map(|w| w * 7)).unwrap_or(7).max(1);
@@ -80,8 +85,8 @@ pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, mark_r
     if as_json { println!("{}", serde_json::to_string_pretty(&digest).unwrap_or_else(|_| "{}".into())); return 0; }
 
     println!("# EntryPlug Dual-Loop Review Digest · since {}{}\n\n## Loop A — About Owner\n- Active records: {}", digest.since, digest.topic.as_ref().map(|t| format!(" · topic: {}", t)).unwrap_or_default(), digest.recent_records.len());
-    for r in digest.recent_records.iter().take(15) { println!("  - {} `{}` [{}|{}] {} → {}", r.date, r.file, r.tool, r.kind, r.situation, r.verdict.chars().take(60).collect::<String>()); }
-    for d in digest.overdue_decisions.iter().take(10) { println!("  - [overdue] {}", d); }
+    for r in digest.recent_records.iter().take(15) { println!("  - {} `{}` [{}|{}] {} → {}", r.date, r.file, r.tool, r.kind, clip(&r.situation, 60), clip(&r.verdict, 60)); }
+    for d in digest.overdue_decisions.iter().take(10) { println!("  - [overdue] {}", clip(d, 140)); }
     for tp in digest.topic_pulses.iter().take(10) { println!("  - [pulse] {}: {}s/{}f{}", tp.topic, tp.sessions_since, tp.fragments_since, if tp.sessions_since >= cfg.topic_pulse_sessions || tp.fragments_since >= cfg.topic_pulse_fragments { " [HOT]" } else { "" }); }
     println!("- Shared memory: verified={}, unverified={}, caution={}", digest.memory_counts.get("verified").copied().unwrap_or(0), digest.memory_counts.get("unverified").copied().unwrap_or(0), digest.memory_counts.get("caution").copied().unwrap_or(0));
     for m in digest.memory_matches.iter().take(12) { println!("  - {}", m); }
