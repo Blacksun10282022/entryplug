@@ -13,12 +13,18 @@ static CTR: AtomicUsize = AtomicUsize::new(0);
 fn plug_bin() -> PathBuf { PathBuf::from(env!("CARGO_BIN_EXE_plug")) }
 fn repo_root() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")) }
 
+fn clean_canon(p: &Path) -> PathBuf {
+    let c = fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let s = c.to_string_lossy();
+    PathBuf::from(s.strip_prefix(r"\\?\").unwrap_or(&s))
+}
+
 fn mktemp(tag: &str) -> PathBuf {
     let id = CTR.fetch_add(1, Ordering::SeqCst);
     let dir = std::env::temp_dir().join(format!("ep2-test-{}-{}-{}", tag, std::process::id(), id));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
-    dir
+    clean_canon(&dir)
 }
 
 fn copy_dir(src: &Path, dst: &Path) {
@@ -55,7 +61,7 @@ fn git(cwd: &Path, args: &[&str]) -> Output {
 
 fn trust_codex_hooks(root: &Path, codex_home: &Path) {
     fs::create_dir_all(codex_home).unwrap();
-    let hooks_path = root.join(".codex").join("hooks.json");
+    let hooks_path = clean_canon(&root.join(".codex").join("hooks.json"));
     let val: Value = serde_json::from_str(&fs::read_to_string(&hooks_path).unwrap()).unwrap();
     let hooks = val["hooks"].as_object().unwrap();
     let path_str = hooks_path.to_string_lossy().to_string();
