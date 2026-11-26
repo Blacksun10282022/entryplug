@@ -33,16 +33,16 @@ fn check_worktree_lock(cfg: &Config, call: &HookCall) -> Option<String> {
     if let Some(cmd) = &call.command {
         // `2>&1`, `2>/dev/null`, `> $null` write nowhere: drop them, or every read that silences stderr reads as a write.
         static RE_SAFE: OnceLock<Regex> = OnceLock::new(); let cmd = &RE_SAFE.get_or_init(|| Regex::new(r"(?i)\d?>&\d|\d?>>?\s*(?:/dev/null|\$null|nul)\b").unwrap()).replace_all(cmd, " ").into_owned();
-        static RE_OP: OnceLock<Regex> = OnceLock::new();
-        if RE_OP.get_or_init(|| Regex::new(r"(?i)(?:>>?|Set-Content|Out-File|Add-Content|\btee\b|\bsed\s+-i|\brm\b|\bRemove-Item|\bmv\b|\bMove-Item|\bcp\b|\bCopy-Item|write_text|write_bytes|shutil\.|git\s+checkout\s+--|git\s+restore)").unwrap()).is_match(cmd) {
+        static RE_MUT: OnceLock<Regex> = OnceLock::new(); static RE_RED: OnceLock<Regex> = OnceLock::new();
+        let spans: Vec<&str> = if RE_MUT.get_or_init(|| Regex::new(r"(?i)(?:\bsed\s+-i|\brm\b|\bRemove-Item|\bmv\b|\bMove-Item|\bcp\b|\bCopy-Item|write_text|write_bytes|shutil\.|git\s+checkout\s+--|git\s+restore)").unwrap()).is_match(cmd) { vec![cmd.as_str()] }
+            else { RE_RED.get_or_init(|| Regex::new(r"(?i)(?:(?:^|[\s0-9])>>?|\b(?:tee|Out-File|Set-Content|Add-Content)\b)[^;&|\r\n]*").unwrap()).find_iter(cmd).map(|m| m.as_str()).collect() };
+        if !spans.is_empty() {
             let (policy, _) = cfg.head_policy();
-            for tok in cmd.split(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ';' | '|' | '&' | '(' | ')' | '>' | '<')).map(str::trim).filter(|t| !t.is_empty() && !t.starts_with('-')) {
-                let norm = tok.replace('\\', "/");
-                if norm.contains(&hooks_pre) || norm.ends_with(cfg.hooks_rel.trim_matches('/')) {
-                    return Some(format!("berserk lock: shell command mutates protected path '{}'", norm));
-                }
-                if let Some(rel) = config::canonical_rel_inside(&cfg.root, &norm).filter(|r| !r.is_empty() && (config::is_protected(&policy, r) || r.starts_with(&hooks_pre))) {
-                    return Some(format!("berserk lock: shell command mutates protected path '{}'", rel));
+            for span in spans {
+                for tok in span.split(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ';' | '|' | '&' | '(' | ')' | '>' | '<')).map(str::trim).filter(|t| !t.is_empty() && !t.starts_with('-')) {
+                    let norm = tok.replace('\\', "/");
+                    if norm.contains(&hooks_pre) || norm.ends_with(cfg.hooks_rel.trim_matches('/')) { return Some(format!("berserk lock: shell command mutates protected path '{}'", norm)); }
+                    if let Some(rel) = config::canonical_rel_inside(&cfg.root, &norm).filter(|r| !r.is_empty() && (config::is_protected(&policy, r) || r.starts_with(&hooks_pre))) { return Some(format!("berserk lock: shell command mutates protected path '{}'", rel)); }
                 }
             }
         }

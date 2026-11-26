@@ -239,13 +239,39 @@ fn v2_unified_diff_apply_exact_matcher_drift_and_worktree_locks() {
         let out = String::from_utf8_lossy(&r.stdout);
         assert!(r.status.success() && out.contains("deny"), "attack not blocked: {} -> {}", atk, out);
     }
-    // 2b. (2026-11-25) Reads that silence stderr are not writes; a real redirect into a protected file still is.
-    for cmd in ["cat plug.yaml 2>&1", "grep -n x self/RULES.md 2>/dev/null", "type plug.yaml > $null"] {
+    // 2b. Reads that silence stderr or redirect to an unprotected target are not writes; a real redirect into a protected file still is.
+    for cmd in ["cat plug.yaml 2>&1", "grep -n x self/RULES.md 2>/dev/null", "type plug.yaml > $null", "cat plug.yaml > work/out.txt", "git diff self/RULES.md | tee work/p.diff", "git log --format=\"%h -> %s\" self/RULES.md"] {
         let r = run_plug(&root, &["gate", "pretool"], Some(&json!({"tool_name":"Bash","tool_input":{"command":cmd},"cwd":&rs}).to_string()), &[], &[]);
         assert!(!String::from_utf8_lossy(&r.stdout).contains("deny"), "a read was blocked: {}", cmd);
     }
-    let w = run_plug(&root, &["gate", "pretool"], Some(&json!({"tool_name":"Bash","tool_input":{"command":"echo x 2>&1 > self/RULES.md"},"cwd":&rs}).to_string()), &[], &[]);
-    assert!(String::from_utf8_lossy(&w.stdout).contains("deny"), "a write behind 2>&1 slipped through");
+    for cmd in ["echo x 2>&1 > self/RULES.md", "cat plug.yaml > self/RULES.md", "cat plug.yaml | tee -a self/RULES.md"] {
+        let w = run_plug(&root, &["gate", "pretool"], Some(&json!({"tool_name":"Bash","tool_input":{"command":cmd},"cwd":&rs}).to_string()), &[], &[]);
+        assert!(String::from_utf8_lossy(&w.stdout).contains("deny"), "a protected write slipped through: {}", cmd);
+    }
+    // 2d. Mirroring syncs disable-model-invocation -> Codex agents/openai.yaml dynamically.
+    let sk = root.join("tools/sunzi/SKILL.md");
+    let sk_orig = fs::read_to_string(&sk).unwrap();
+    fs::write(&sk, sk_orig.replacen("---\n", "---\ndisable-model-invocation: true\n", 1)).unwrap();
+    assert!(run_plug(&root, &["index"], None, &[], &[]).status.success());
+    let oa = root.join(".agents/skills/sunzi/agents/openai.yaml");
+    assert!(fs::read_to_string(&oa).unwrap().contains("allow_implicit_invocation: false"), "openai.yaml did not flip false");
+    fs::write(&sk, &sk_orig).unwrap();
+    assert!(run_plug(&root, &["index"], None, &[], &[]).status.success());
+    assert!(fs::read_to_string(&oa).unwrap().contains("allow_implicit_invocation: true"), "openai.yaml did not flip back true");
+    // 2e. Applying plug.yaml with an extra protect glob commits the auto-synced .claude/settings.json cleanly (no PATTERN ORANGE drift).
+    let py = root.join("plug.yaml");
+    let py_h = String::from_utf8_lossy(&run_plug(&root, &["hash", py.to_str().unwrap()], None, &[], &[]).stdout).trim().to_string();
+    let py_raw = fs::read_to_string(&py).unwrap();
+    let last_idx = py_raw.lines().count();
+    let last_ln = py_raw.lines().last().unwrap();
+    fs::write(root.join("proposals/pending/2026-11-27-py.md"), format!(
+        "---\ntarget: plug.yaml\nbase: \"{}\"\nfrom: test\n---\n## 改成什么\n```diff\n@@ -{},1 +{},3 @@\n {}\n+protect:\n+  - \"CLAUDE.md\"\n```\n## 为什么\nsync test\n## 最强反证\nnone\n",
+        py_h, last_idx, last_idx, last_ln
+    )).unwrap();
+    let apy = run_plug(&root, &["apply", "proposals/pending/2026-11-27-py.md"], None, &penv, &[]);
+    assert!(apy.status.success(), "plug.yaml apply failed: {}", String::from_utf8_lossy(&apy.stdout));
+    let st_after = run_plug(&root, &["status"], None, &penv, &[]);
+    assert!(String::from_utf8_lossy(&st_after.stdout).contains("SYNC RATE 100.0%"), "status degraded after plug.yaml apply:\n{}", String::from_utf8_lossy(&st_after.stdout));
     // 2c. (2026-11-25) A linked git worktree reads the shared pre-commit through `commondir`.
     let wtp = base.join("wt-copy");
     git(&root, &["worktree", "add", "-q", "--detach", wtp.to_str().unwrap(), "HEAD"]);
@@ -375,11 +401,28 @@ fn v2_posttool_concurrency_blind_quotes_spine_books_trace_prompt_review() {
     let pb = run_plug(&root, &["gate", "prompt"], Some(&bom), &[], &[]);
     assert!(String::from_utf8_lossy(&pb.stdout).contains("[hint] check self/memory/h3.md"), "a BOM-prefixed payload was dropped");
 
+    // 7. Tiered tools ranking boosts memory:verified above an equally matching older record; universal --help has zero side effects; review --json clips by default & includes top_gate_denies.
+    fs::create_dir_all(root.join("self/memory")).unwrap();
+    fs::write(root.join("self/memory/verified-hit.md"), "---\nstatus: verified\ndate: 2026-11-25\n---\nBOOST独有词 确认方案。\n").unwrap();
+    fs::write(root.join("self/records/2025-01-01-old-hit.md"), "---\nkind: note\nsituation: BOOST独有词\n---\nBOOST独有词 旧记录。\n").unwrap();
+    let long_v = "长判断内容".repeat(70);
+    fs::write(root.join("self/records/2026-11-26-long-verdict.md"), format!("---\ntool: sunzi\nby: codex · gpt-5 · 2026-11-26\nsituation: 长摘要测\nverdict: {}\ntopic: H3\n---\n## 依据\n无类似记录\n## 最强反证\nb\n## 什么会改判\nc\n", long_v)).unwrap();
+    assert!(run_plug(&root, &["index"], None, &[], &[]).status.success());
+    let ranked = run_plug(&root, &["search", "BOOST独有词", "--scope", "tools"], None, &[], &[]);
+    assert!(String::from_utf8_lossy(&ranked.stdout).lines().next().unwrap_or("").contains("verified-hit"), "verified memory did not outrank older record:\n{}", String::from_utf8_lossy(&ranked.stdout));
+    let _ = run_plug(&root, &["gate", "pretool"], Some(&json!({"tool_name":"Edit","tool_input":{"file_path":"self/RULES.md"},"cwd":&rs}).to_string()), &[], &[]);
+
     let rev = run_plug(&root, &["review", "--since", "30d", "--topic", "H3", "--json", "--mark-reviewed"], None, &[], &[]);
     let rev_s = String::from_utf8_lossy(&rev.stdout);
-    assert!(rev.status.success() && rev_s.contains("\"topic\": \"H3\"") && rev_s.contains("quote_reject"), "review: {}", rev_s);
-    let help = run_plug(&root, &["review", "--help"], None, &[], &[]);
-    assert!(String::from_utf8_lossy(&help.stdout).starts_with("usage: plug review"), "review --help ran a review");
+    assert!(rev.status.success() && rev_s.contains("\"topic\": \"H3\"") && rev_s.contains("quote_reject") && rev_s.contains("top_gate_denies") && !rev_s.contains(&long_v), "review compact json: {}", rev_s);
+    let rev_full = run_plug(&root, &["review", "--since", "30d", "--topic", "H3", "--json", "--full"], None, &[], &[]);
+    assert!(String::from_utf8_lossy(&rev_full.stdout).contains(&long_v), "review --full did not preserve full verdict");
+    let num_before = fs::read_to_string(root.join("self/数字.md")).ok();
+    for cmd in ["check", "status", "search", "index", "review"] {
+        let h = run_plug(&root, &[cmd, "--help"], None, &[], &[]);
+        assert!(h.status.success() && String::from_utf8_lossy(&h.stdout).starts_with("usage: plug "), "{} --help failed: {}", cmd, String::from_utf8_lossy(&h.stdout));
+    }
+    assert_eq!(fs::read_to_string(root.join("self/数字.md")).ok(), num_before, "check --help mutated numbers page");
 
     let _ = fs::remove_dir_all(&base);
 }

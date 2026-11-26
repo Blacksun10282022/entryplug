@@ -8,11 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-const AGENT_ENV: &[&str] = &[
-    "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_SESSION_ID",
-    "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CURSOR_AGENT",
-    "AIDER_CHAT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
-];
+const AGENT_ENV: &[&str] = &["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_SESSION_ID", "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID", "CURSOR_AGENT", "AIDER_CHAT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"];
 
 fn owner_refusal(proposal: &str, owner: bool) -> Option<String> {
     if owner || std::env::var("PLUG_OWNER").ok().as_deref() == Some("1") { return None; }
@@ -97,6 +93,8 @@ pub fn run(cfg: &Config, proposal: &str, reject: Option<&str>, dry_run: bool, ow
     let (psha, applied_rel) = (util::sha256_hex(raw.as_bytes())[..12].to_string(), next_cfg.rel(&applied_dst));
     let mut paths = vec![trel.clone(), prel.clone(), applied_rel.clone()];
     if action == "retire" { paths.push(next_cfg.rel(&retire_dest)); }
+    let synced = if trel.eq_ignore_ascii_case("plug.yaml") { init::sync_installed_pilots(&next_cfg) } else { Vec::new() };
+    for (st, sp) in &synced { if matches!(st.as_str(), "written" | "updated") && !sp.starts_with(".git") { paths.push(sp.clone()); } }
     if util::git_ro(&next_cfg.root, &["rev-parse", "--git-dir"]).is_some() {
         let env = [("KB_APPROVE", "1")];
         for p in &paths { let _ = util::git_run(&next_cfg.root, &["add", "-A", "--", p], &env, &[]); }
@@ -114,7 +112,7 @@ pub fn run(cfg: &Config, proposal: &str, reject: Option<&str>, dry_run: bool, ow
         }
     }
     let _ = index::build(&next_cfg, false, false);
-    if trel.eq_ignore_ascii_case("plug.yaml") { let sl = init::sync_installed_pilots(&next_cfg); if !sl.is_empty() { println!("apply: plug.yaml changed → auto-synced pilot wiring ({} item(s))", sl.len()); } }
+    if !synced.is_empty() { println!("apply: plug.yaml changed → auto-synced & committed pilot wiring ({} item(s))", synced.len()); for (st, msg) in &synced { if st == "RE-TRUST" { println!("apply: {} {}", st, msg); } } }
     println!("landed and committed: {} {} · proposal → {} · Proposal-Sha {}", action, trel, applied_rel, psha);
     0
 }

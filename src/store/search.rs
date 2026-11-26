@@ -6,33 +6,14 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
-pub struct SearchOpts {
-    pub queries: Vec<String>, pub scope: String, pub tool: Option<String>, pub kind: Option<String>,
-    pub date_from: Option<String>, pub date_to: Option<String>, pub series: Option<String>,
-    pub history: bool, pub view: String, pub k: usize, pub per_doc: usize,
-    pub check_stale: bool, pub record_telemetry: bool,
-}
-
-impl Default for SearchOpts {
-    fn default() -> Self {
-        Self { queries: Vec::new(), scope: "tools".into(), tool: None, kind: None, date_from: None, date_to: None, series: None, history: false, view: "compact".into(), k: 8, per_doc: 2, check_stale: true, record_telemetry: false }
-    }
-}
-
+pub struct SearchOpts { pub queries: Vec<String>, pub scope: String, pub tool: Option<String>, pub kind: Option<String>, pub date_from: Option<String>, pub date_to: Option<String>, pub series: Option<String>, pub history: bool, pub view: String, pub k: usize, pub per_doc: usize, pub check_stale: bool, pub record_telemetry: bool }
+impl Default for SearchOpts { fn default() -> Self { Self { queries: Vec::new(), scope: "tools".into(), tool: None, kind: None, date_from: None, date_to: None, series: None, history: false, view: "compact".into(), k: 8, per_doc: 2, check_stale: true, record_telemetry: false } } }
 #[derive(Debug, Clone, Serialize)]
-pub struct SearchRow {
-    pub id: String, pub doc: String, pub title: String, pub file: String, pub lstart: i64, pub lend: i64,
-    pub pos: String, pub scope: String, pub tool: String, pub kind: String, pub date: String, pub series: String,
-    pub excerpt: String, pub verdict: String, pub outcome: String, pub supersedes: String,
-}
-
+pub struct SearchRow { pub id: String, pub doc: String, pub title: String, pub file: String, pub lstart: i64, pub lend: i64, pub pos: String, pub scope: String, pub tool: String, pub kind: String, pub date: String, pub series: String, pub excerpt: String, pub verdict: String, pub outcome: String, pub supersedes: String }
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResult { pub rows: Vec<SearchRow>, pub total: usize, pub stale: Option<String>, pub view: String }
 
-fn load_aliases(con: &Connection) -> HashMap<String, Vec<String>> {
-    con.query_row("SELECT value FROM meta WHERE key='aliases'", [], |r| r.get::<_, String>(0))
-        .ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
-}
+fn load_aliases(con: &Connection) -> HashMap<String, Vec<String>> { con.query_row("SELECT value FROM meta WHERE key='aliases'", [], |r| r.get::<_, String>(0)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default() }
 
 fn run_single_db(con: &Connection, fts_expr: &str, opts: &SearchOpts, is_books: bool, limit: usize) -> Result<Vec<SearchRow>, String> {
     let mut sql = if is_books {
@@ -50,7 +31,8 @@ fn run_single_db(con: &Connection, fts_expr: &str, opts: &SearchOpts, is_books: 
         if let Some(v) = val.as_deref().filter(|s| !s.is_empty()) { sql.push_str(" AND "); sql.push_str(col); vals.push(SqlVal::Text(v.into())); }
     }
     if let Some(s) = opts.series.as_deref().filter(|s| !s.is_empty()) { sql.push_str(" AND c.series LIKE ?"); vals.push(SqlVal::Text(format!("%{}%", s))); }
-    sql.push_str(" ORDER BY bm25(fts, 20.0, 1.0) LIMIT ?");
+    if is_books || opts.scope == "corpus" { sql.push_str(" ORDER BY bm25(fts, 20.0, 1.0) LIMIT ?"); }
+    else { sql.push_str(" ORDER BY bm25(fts, 20.0, 1.0) * (CASE WHEN c.scope='tools' AND c.kind IN ('memory:verified','memory:caution','rules','manual') THEN 1.35 WHEN c.scope='tools' AND (c.kind='memory' OR c.kind LIKE 'memory:%') THEN 1.20 ELSE 1.0 END) * (CASE WHEN c.scope IN ('tools','logs') AND c.date >= date('now','-30 days') THEN 1.10 WHEN c.scope IN ('tools','logs') AND c.date >= date('now','-90 days') THEN 1.04 ELSE 1.0 END) LIMIT ?"); }
     vals.push(SqlVal::Integer(limit as i64));
 
     let mut st = con.prepare(&sql).map_err(|e| format!("search prepare: {}", e))?;

@@ -9,7 +9,6 @@ use std::fs;
 use std::path::Path;
 
 const INDEX_MD_CAP: usize = 36_000;
-const OPENAI_YAML_TMPL: &str = include_str!("../../pilots/codex/agents-openai.yaml");
 
 #[derive(Debug, Clone)]
 pub struct ChunkRow { pub id: String, pub doc: String, pub title: String, pub file: String, pub lstart: usize, pub lend: usize, pub pos: String, pub scope: String, pub tool: String, pub kind: String, pub date: String, pub series: String, pub excerpt: String, pub title_tokens: String, pub tokens: String }
@@ -367,7 +366,8 @@ pub fn mirror_skills(cfg: &Config) -> Result<Vec<String>, String> {
             if fs::read(&dst).ok().as_deref() != Some(bytes.as_slice()) { fs::write(&dst, &bytes).map_err(|e| e.to_string())?; }
             if dir.contains(".agents/skills") {
                 let oa = dst_dir.join("agents").join("openai.yaml");
-                if !oa.exists() { let _ = util::write_lf(&oa, &OPENAI_YAML_TMPL.replace("{{name}}", &t.name)); }
+                let allow = shapes::split_frontmatter(&String::from_utf8_lossy(&bytes)).0.map(|f| !shapes::fm_str(&f, "disable-model-invocation").eq_ignore_ascii_case("true")).unwrap_or(true);
+                if !fs::read_to_string(&oa).ok().map(|s| s.contains(&format!("allow_implicit_invocation: {}", allow))).unwrap_or(false) { let _ = util::write_lf(&oa, &format!("policy:\n  allow_implicit_invocation: {}\n", allow)); }
             }
             cur.insert(format!("{}/{}", dir, t.name));
         }

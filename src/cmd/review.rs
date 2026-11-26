@@ -14,7 +14,7 @@ struct ReviewDigest {
     generated_at: String, since: String, topic: Option<String>, records_total: i64, recent_records: Vec<RecordDigest>,
     overdue_decisions: Vec<String>, topic_pulses: Vec<telemetry::TopicPulseRow>, memory_counts: HashMap<String, usize>,
     memory_matches: Vec<String>, log_days_matching: Vec<String>, telemetry_counts: HashMap<String, usize>,
-    top_zero_hits: Vec<(String, usize)>, quote_rejections: Vec<String>,
+    top_zero_hits: Vec<(String, usize)>, top_gate_denies: Vec<(String, usize)>, quote_rejections: Vec<String>,
 }
 
 fn clip(s: &str, n: usize) -> String {
@@ -22,7 +22,7 @@ fn clip(s: &str, n: usize) -> String {
     if cs.len() <= n { cs.into_iter().collect() } else { format!("{}…", cs[..n].iter().collect::<String>()) }
 }
 
-pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, mark_reviewed: bool) -> i32 {
+pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, full: bool, mark_reviewed: bool) -> i32 {
     let s = since.trim().to_lowercase();
     let days = s.strip_suffix('d').and_then(|n| n.parse::<i64>().ok()).or_else(|| s.strip_suffix('w').and_then(|n| n.parse::<i64>().ok()).map(|w| w * 7)).unwrap_or(7).max(1);
     let cutoff_day = (util::today() - Duration::days(days)).format("%Y-%m-%d").to_string();
@@ -34,6 +34,7 @@ pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, mark_r
         if let Ok(mut st) = con.prepare("SELECT file, date, tool, kind, situation, verdict, outcome, topic FROM records WHERE superseded_by = '' AND date >= ?1 ORDER BY date DESC, file DESC LIMIT 120") {
             for (file, date, tool, kind, sit, verdict, outcome, rt) in st.query_map([&cutoff_day], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?, r.get::<_, String>(6)?, r.get::<_, String>(7)?))).ok().into_iter().flatten().filter_map(Result::ok) {
                 if topic_low.as_ref().map(|tl| format!("{} {} {} {} {}", file, tool, sit, verdict, rt).to_lowercase().contains(tl)).unwrap_or(true) {
+                    let (sit, verdict) = if as_json && !full { (clip(&sit, 240), clip(&verdict, 240)) } else { (sit, verdict) };
                     recent_records.push(RecordDigest { file, date, tool, kind, situation: sit, verdict, outcome });
                 }
             }
@@ -71,21 +72,21 @@ pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, mark_r
         }
     }
 
-    let (mut telemetry_counts, mut zero_map, mut quote_rejections) = (HashMap::<String, usize>::new(), HashMap::<String, usize>::new(), Vec::new());
+    let (mut telemetry_counts, mut zero_map, mut deny_map, mut quote_rejections) = (HashMap::<String, usize>::new(), HashMap::<String, usize>::new(), HashMap::<String, usize>::new(), Vec::new());
     for ev in telemetry::read_events(cfg, &format!("{}T00:00:00", cutoff_day)) {
         *telemetry_counts.entry(ev.event.clone()).or_insert(0) += 1;
         if ev.event == "zero_hit" { *zero_map.entry(ev.detail).or_insert(0) += 1; }
+        else if ev.event == "gate_deny" { *deny_map.entry(clip(&ev.detail, 72)).or_insert(0) += 1; }
         else if ev.event == "quote_reject" && quote_rejections.len() < 15 { quote_rejections.push(format!("{} · {}", &ev.ts[..10.min(ev.ts.len())], ev.detail)); }
     }
-    let mut top_zero_hits: Vec<(String, usize)> = zero_map.into_iter().collect();
-    top_zero_hits.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    top_zero_hits.truncate(15);
+    let top_n = |m: HashMap<String, usize>, n: usize| { let mut v: Vec<_> = m.into_iter().collect(); v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0))); v.truncate(n); v };
+    let (top_zero_hits, top_gate_denies) = (top_n(zero_map, 15), top_n(deny_map, 6));
 
     if mark_reviewed {
         telemetry::log_event(cfg, "review_done", &format!("since={} topic={}", since, topic.unwrap_or("all")), "", topic.unwrap_or(""));
         telemetry::reset_topic_pulse(cfg, topic);
     }
-    let digest = ReviewDigest { generated_at: util::now_iso(), since: cutoff_day, topic: topic.map(String::from), records_total, recent_records, overdue_decisions, topic_pulses, memory_counts, memory_matches, log_days_matching, telemetry_counts, top_zero_hits, quote_rejections };
+    let digest = ReviewDigest { generated_at: util::now_iso(), since: cutoff_day, topic: topic.map(String::from), records_total, recent_records, overdue_decisions, topic_pulses, memory_counts, memory_matches, log_days_matching, telemetry_counts, top_zero_hits, top_gate_denies, quote_rejections };
     if as_json { println!("{}", serde_json::to_string_pretty(&digest).unwrap_or_else(|_| "{}".into())); return 0; }
 
     println!("# EntryPlug Dual-Loop Review Digest · since {}{}\n\n## Loop A — About Owner\n- Active records: {}{}", digest.since, digest.topic.as_ref().map(|t| format!(" · topic: {}", t)).unwrap_or_default(), digest.recent_records.len(), if digest.records_total > 120 { format!(" (newest 120 of {} in the window; query the index or narrow --since for the rest)", digest.records_total) } else { String::new() });
@@ -97,6 +98,7 @@ pub fn run(cfg: &Config, since: &str, topic: Option<&str>, as_json: bool, mark_r
     if !digest.log_days_matching.is_empty() { println!("- Matching trace logs: {}", digest.log_days_matching.iter().take(10).cloned().collect::<Vec<_>>().join(", ")); }
     println!("\n## Loop B — About EntryPlug\n- Telemetry: zero_hit={}, gate_deny={}, quote_reject={}", digest.telemetry_counts.get("zero_hit").copied().unwrap_or(0), digest.telemetry_counts.get("gate_deny").copied().unwrap_or(0), digest.telemetry_counts.get("quote_reject").copied().unwrap_or(0));
     for (q, n) in digest.top_zero_hits.iter().take(8) { println!("  - ({}x) {}", n, q); }
+    for (d, n) in digest.top_gate_denies.iter().take(6) { println!("  - [deny {}x] {}", n, d); }
     for qr in digest.quote_rejections.iter().take(6) { println!("  - {}", qr); }
     println!("\nNext: draft <=5 items (verified wins / caution traps + EntryPlug fixes) for owner approval.");
     0
